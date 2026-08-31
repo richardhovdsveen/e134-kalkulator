@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>E134-stengingen: Belastningskalkulator for Frogn</title>
+<meta name="description" content="Uoffisiell borgersimulering: Hva skjer med lokalveiene i Frogn når E134 Vassum–Måna stenges under byggingen av ny Oslofjordtunnel? Juster forutsetningene selv.">
+<meta property="og:title" content="E134-stengingen: Belastningskalkulator for Frogn">
+<meta property="og:description" content="Hva skjer med rv. 152, Osloveien, Holtbråtveien og Heer når E134 Vassum–Måna stenges i to år? Juster forutsetningene selv og del scenarioet ditt.">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  color-scheme: light;
+  --page:#f9f9f7; --surface:#fcfcfb; --surface-2:#f0efec;
+  --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axisline:#c3c2b7; --border:rgba(11,11,11,.10);
+  --series:#2a78d6; --series-soft:#9ec5f4;
+  --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --critical:#d03b3b;
+  --closed:#d03b3b;
+}
+@media (prefers-color-scheme: dark){
+  :root:where(:not([data-theme="light"])){
+    color-scheme: dark;
+    --page:#0d0d0d; --surface:#1a1a19; --surface-2:#242422;
+    --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axisline:#383835; --border:rgba(255,255,255,.10);
+    --series:#3987e5; --series-soft:#1c5cab;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--page); color:var(--ink);
+  font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+a{color:var(--series)}
+header.site{
+  padding:20px 22px 14px; max-width:1400px; margin:0 auto;
+}
+header.site h1{font-size:22px; margin:0 0 4px; line-height:1.25}
+header.site .sub{color:var(--ink-2); max-width:70ch; margin:0}
+.badge{
+  display:inline-block; font-size:11px; font-weight:600; letter-spacing:.02em;
+  padding:2px 8px; border-radius:99px; border:1px solid var(--border);
+  background:var(--surface-2); color:var(--ink-2); vertical-align:middle; margin-left:8px;
+}
+.layout{
+  display:grid; grid-template-columns: minmax(380px,7fr) minmax(340px,5fr);
+  gap:16px; max-width:1400px; margin:0 auto; padding:0 22px 30px;
+}
+@media (max-width: 980px){ .layout{grid-template-columns:1fr} .mapwrap{position:static !important; height:60vh !important} }
+.mapwrap{
+  position:sticky; top:12px; height:calc(100vh - 24px); min-height:420px;
+  border-radius:12px; overflow:hidden; border:1px solid var(--border); background:var(--surface);
+}
+#map{width:100%; height:100%}
+.leaflet-container{font:inherit; background:var(--surface-2)}
+.maplegend{
+  background:var(--surface); border:1px solid var(--border); border-radius:10px;
+  padding:8px 10px; font-size:12px; line-height:1.6; box-shadow:0 1px 4px rgba(0,0,0,.12);
+}
+.maplegend .row{display:flex; align-items:center; gap:7px}
+.maplegend .sw{width:18px; height:4px; border-radius:2px; flex:none}
+.maplegend .sw.dash{background:repeating-linear-gradient(90deg,var(--closed) 0 4px,transparent 4px 8px); height:3px}
+.maplegend .sw.tun{background:repeating-linear-gradient(90deg,var(--muted) 0 4px,transparent 4px 8px); height:3px}
+.panel{display:flex; flex-direction:column; gap:14px}
+.card{
+  background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px;
+}
+.card h2{font-size:14px; margin:0 0 4px; letter-spacing:.01em}
+.card h2 .hint{font-weight:400; color:var(--muted); font-size:12px}
+.controls .group{margin-top:10px}
+.controls .group+.group{border-top:1px solid var(--grid); padding-top:12px}
+.controls .gtitle{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:6px}
+.slider{margin:8px 0 2px}
+.slider label{display:flex; justify-content:space-between; gap:10px; align-items:baseline}
+.slider .val{font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap}
+.slider .desc{color:var(--muted); font-size:12px; margin-top:1px}
+input[type=range]{width:100%; accent-color:var(--series); margin:4px 0 0}
+.btnrow{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px}
+button{
+  font:inherit; font-weight:600; padding:7px 12px; border-radius:8px; cursor:pointer;
+  border:1px solid var(--border); background:var(--surface-2); color:var(--ink);
+}
+button.primary{background:var(--series); border-color:var(--series); color:#fff}
+button:hover{filter:brightness(.96)}
+.copied{font-size:12px; color:var(--good); align-self:center; font-weight:600}
+.seggrid{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+@media (max-width:520px){.seggrid{grid-template-columns:1fr}}
+.seg{
+  border:1px solid var(--border); border-radius:10px; padding:10px 12px; cursor:pointer;
+  background:var(--surface); display:flex; flex-direction:column; gap:2px;
+  border-left:4px solid var(--axisline);
+}
+.seg:hover{background:var(--surface-2)}
+.seg.sel{outline:2px solid var(--series); outline-offset:-1px}
+.seg .name{font-weight:650; font-size:13px; line-height:1.3}
+.seg .nums{display:flex; gap:10px; flex-wrap:wrap; margin-top:3px}
+.seg .num{display:flex; flex-direction:column}
+.seg .num b{font-size:16px; font-variant-numeric:tabular-nums; line-height:1.2}
+.seg .num span{font-size:11px; color:var(--muted)}
+.chip{display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; margin-top:5px}
+.chip .dot{width:9px; height:9px; border-radius:50%; flex:none}
+.delta{font-variant-numeric:tabular-nums}
+.up{color:var(--critical)}
+.statgrid{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+@media (max-width:520px){.statgrid{grid-template-columns:1fr}}
+.stat{border:1px solid var(--border); border-radius:10px; padding:10px 12px; background:var(--surface)}
+.stat .t{font-size:12px; color:var(--ink-2)}
+.stat .v{font-size:21px; font-weight:750; line-height:1.2; margin-top:2px}
+.stat .v small{font-size:12px; font-weight:600; color:var(--muted)}
+.stat .d{font-size:12px; color:var(--muted); margin-top:2px}
+.warnbox{border-left:4px solid var(--serious)}
+.chartwrap{position:relative}
+.chartwrap svg{display:block; width:100%; height:auto}
+.ttip{
+  position:absolute; pointer-events:none; background:var(--surface); border:1px solid var(--border);
+  box-shadow:0 2px 8px rgba(0,0,0,.18); border-radius:8px; padding:6px 9px; font-size:12px;
+  display:none; z-index:5; white-space:nowrap;
+}
+.ttip b{font-variant-numeric:tabular-nums}
+.tbltoggle{margin-top:8px; font-size:12px}
+.datatable{width:100%; border-collapse:collapse; font-size:12px; margin-top:8px}
+.datatable th,.datatable td{border-bottom:1px solid var(--grid); padding:3px 6px; text-align:right; font-variant-numeric:tabular-nums}
+.datatable th:first-child,.datatable td:first-child{text-align:left}
+.tt-table{width:100%; border-collapse:collapse; font-size:13px}
+.tt-table th,.tt-table td{border-bottom:1px solid var(--grid); padding:6px 6px; text-align:right; font-variant-numeric:tabular-nums}
+.tt-table th:first-child,.tt-table td:first-child{text-align:left}
+.tt-table th{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; font-weight:700}
+details.method{font-size:13px; color:var(--ink-2)}
+details.method summary{cursor:pointer; font-weight:650; color:var(--ink)}
+details.method h3{font-size:13px; margin:12px 0 4px; color:var(--ink)}
+details.method ul{margin:4px 0; padding-left:18px}
+.adv{margin-top:8px}
+.adv table{width:100%; border-collapse:collapse; font-size:12px}
+.adv td{padding:3px 4px; border-bottom:1px solid var(--grid)}
+.adv input[type=number]{width:76px; font:inherit; padding:2px 5px; border:1px solid var(--axisline); border-radius:6px; background:var(--surface); color:var(--ink)}
+footer.site{max-width:1400px; margin:0 auto; padding:0 22px 34px; color:var(--muted); font-size:12px}
+.srmark{font-weight:700}
+</style>
+</head>
+<body>
+<header class="site">
+  <h1>Hva skjer med veiene våre når E134 stenger? <span class="badge">Uoffisiell borgersimulering</span></h1>
+  <p class="sub">Under byggingen av nytt løp i Oslofjordtunnelen skal E134 mellom Vassum (E6) og rundkjøringen på Måna
+  etter planen stenges i en sammenhengende periode på om lag to år (trafikkomlegging 2027–2028).
+  Dagens trafikk må da ut på lokalveiene. Dra i bryterne og se hva <em>dine</em> forutsetninger betyr for
+  rv. 152, Osloveien, Holtbråtveien – og for Heer, Dyrløkke og Drøbak sentrum. Tallene er estimater, ikke fasit.</p>
+</header>
+
+<div class="layout">
+  <div class="mapwrap"><div id="map" role="img" aria-label="Kart over Frogn med beregnet belastning på omkjøringsveiene"></div></div>
+
+  <div class="panel">
+
+    <section class="card controls" id="controls">
+      <h2>Forutsetninger <span class="hint">– juster selv</span></h2>
+      <div class="group">
+        <div class="gtitle">Trafikkgrunnlag</div>
+        <div id="sliders-base"></div>
+      </div>
+      <div class="group">
+        <div class="gtitle">Hvor tar trafikken veien?</div>
+        <div id="sliders-route"></div>
+      </div>
+      <div class="group">
+        <div class="gtitle">Lokale forhold</div>
+        <div id="sliders-local"></div>
+      </div>
+      <div class="btnrow">
+        <button class="primary" id="sharebtn" type="button">Kopier lenke til dette scenarioet</button>
+        <button id="resetbtn" type="button">Nullstill</button>
+        <span class="copied" id="copiedmsg" hidden>Lenke kopiert!</span>
+      </div>
+      <details class="adv">
+        <summary style="cursor:pointer;font-size:12px;color:var(--muted)">Avansert: grunntrafikk og kapasitet per vei</summary>
+        <table id="advtable" aria-label="Grunntrafikk og kapasitet per veistrekning"></table>
+        <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Grunntrafikk = dagens ÅDT på veien (uten omkjøring). Kapasitet = praktisk kapasitet i kjøretøy per time per retning (lavere enn teoretisk pga. kryss og avkjørsler). Sjekk gjerne reelle tall i Statens vegvesens trafikkdata-kart og juster.</p>
+      </details>
+    </section>
+
+    <section class="card">
+      <h2>Beregnet belastning per vei <span class="hint">– klikk for å se timeprofil</span></h2>
+      <div class="seggrid" id="seggrid"></div>
+    </section>
+
+    <section class="card">
+      <h2 id="charttitle">Trafikk over døgnet</h2>
+      <div class="chartwrap" id="chartwrap">
+        <svg id="chart" viewBox="0 0 640 260" preserveAspectRatio="xMidYMid meet" aria-labelledby="charttitle"></svg>
+        <div class="ttip" id="charttip"></div>
+      </div>
+      <div class="tbltoggle"><a href="#" id="tabletoggle">Vis som tabell</a></div>
+      <div id="tablewrap" hidden></div>
+    </section>
+
+    <section class="card">
+      <h2>Reisetider <span class="hint">– estimert, med omkjøring</span></h2>
+      <table class="tt-table" id="tttable"></table>
+    </section>
+
+    <section class="card">
+      <h2>Hva betyr det lokalt?</h2>
+      <div class="statgrid" id="localstats"></div>
+    </section>
+
+    <section class="card">
+      <details class="method">
+        <summary>Forutsetninger, metode og kilder</summary>
+        <div id="methodbody"></div>
+      </details>
+    </section>
+
+  </div>
+</div>
+
+<footer class="site">
+  Laget som et innbyggerinitiativ i Drøbak for å belyse mulige konsekvenser av anleggsperioden.
+  Alle tall er forenklede estimater som kan justeres – dette er ikke en offisiell trafikkanalyse.
+  Statens vegvesens egen trafikkanalyse for anleggsperioden er under utarbeidelse.
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+"use strict";
+/* ==========================================================================
+   E134-stengingen – belastningskalkulator for Frogn
+   Alt av forutsetninger kan justeres i CONFIG under. Rutegeometrien er hentet fra
+   OSRM/OpenStreetMap sitt veinett (via router.project-osrm.org) og følger
+   de faktiske veiene; Smieveien er tegnet ut fra adressepunkter og er mest
+   omtrentlig.
+   ========================================================================== */
+
+/* ---------- Veinett (skjematiske ruter over ekte kart) ------------------- */
+const ROADS = {
+  rv152_east: {
+    name: "Rv. 152 Korsegården (E6) – Ottarsrud – Dyrløkke",
+    short: "Rv. 152 fra Ås",
+    base: 7500, cap: 850, lenKm: 6.9, speed: 70,
+    coords: [[59.6627,10.74598],[59.66254,10.7443],[59.66156,10.74139],[59.66083,10.73626],[59.65963,10.73215],[59.65944,10.72669],[59.65826,10.72047],[59.65843,10.71199],[59.6565,10.70354],[59.65642,10.69317],[59.65801,10.68847],[59.65747,10.68546],[59.6578,10.68347],[59.66005,10.67962],[59.65999,10.67585],[59.66046,10.67332],[59.66039,10.66856],[59.66073,10.66682],[59.66448,10.66066],[59.66755,10.65952],[59.66967,10.66002],[59.67309,10.65749],[59.67365,10.6565],[59.6738,10.65592],[59.67412,10.65495]]
+  },
+  rv152_north: {
+    name: "Rv. 152 Dyrløkke – Heer – Måna",
+    short: "Rv. 152 Dyrløkke–Måna",
+    base: 10000, cap: 850, lenKm: 3.4, speed: 60,
+    coords: [[59.67412,10.65495],[59.6753,10.65771],[59.67853,10.66324],[59.68032,10.66514],[59.68225,10.66627],[59.68515,10.66887],[59.68616,10.66786],[59.68661,10.66429],[59.68772,10.66207],[59.68935,10.66011],[59.6908,10.65908],[59.6924,10.65883],[59.6944,10.66019],[59.69476,10.65997]]
+  },
+  osloveien_north: {
+    name: "Osloveien Måna – Vinterbro/E6",
+    short: "Osloveien (mot E6 nord)",
+    base: 3500, cap: 750, lenKm: 5.6, speed: 70,
+    coords: [[59.68515,10.66887],[59.68591,10.67032],[59.68637,10.67217],[59.68745,10.67882],[59.68844,10.68719],[59.68883,10.68951],[59.69011,10.69448],[59.6916,10.69847],[59.69212,10.70067],[59.69217,10.70158],[59.69198,10.70278],[59.68598,10.7054],[59.68404,10.7115],[59.68548,10.7279],[59.68834,10.73243],[59.6894,10.73608]]
+  },
+  holtbrat: {
+    name: "Holtbråtveien (Måna – mot Nesodden)",
+    short: "Holtbråtveien",
+    base: 2500, cap: 600, lenKm: 3.3, speed: 60,
+    coords: [[59.69476,10.65997],[59.69566,10.65761],[59.69622,10.65693],[59.69696,10.65693],[59.69771,10.65752],[59.69906,10.65975],[59.70303,10.66387],[59.70372,10.66414],[59.70575,10.66389],[59.70723,10.66508],[59.70946,10.6658],[59.71282,10.66476],[59.71358,10.6641],[59.71462,10.66212],[59.71539,10.66245],[59.71608,10.66232],[59.71668,10.6629],[59.71726,10.66243]]
+  },
+  fv156: {
+    name: "Nesoddveien/fv. 156 Nessetveien (mot E6 Vinterbro)",
+    short: "Fv. 156/Nesoddveien",
+    base: 3000, cap: 700, lenKm: 10.1, speed: 70,
+    coords: [[59.71726,10.66243],[59.71803,10.66176],[59.71946,10.66328],[59.71984,10.66654],[59.72107,10.66998],[59.72158,10.67426],[59.72432,10.67901],[59.72674,10.68525],[59.72359,10.68994],[59.72428,10.69485],[59.72342,10.69746],[59.72067,10.70001],[59.72061,10.70065],[59.72117,10.70113],[59.72118,10.70226],[59.72008,10.70361],[59.72016,10.70545],[59.71881,10.70668],[59.71683,10.70571],[59.71561,10.70656],[59.7145,10.70623],[59.71408,10.70748],[59.71634,10.71132],[59.71642,10.71565],[59.71788,10.71869],[59.71918,10.71997],[59.71929,10.72227],[59.72029,10.7251],[59.71968,10.72907],[59.7215,10.72865],[59.72449,10.72934],[59.72613,10.73174],[59.72941,10.73386],[59.73529,10.74635],[59.73623,10.75014],[59.73698,10.76059],[59.73876,10.77168]]
+  },
+  osloveien_drobak: {
+    name: "Osloveien Drøbak sentrum – Dyrløkke",
+    short: "Osloveien fra Drøbak",
+    base: 8000, cap: 750, lenKm: 2.7, speed: 50,
+    localOnly: true,
+    coords: [[59.66276,10.63035],[59.66247,10.63087],[59.66251,10.63168],[59.66282,10.63266],[59.66316,10.63358],[59.66355,10.63424],[59.66367,10.63541],[59.66436,10.63603],[59.66499,10.63534],[59.66556,10.63554],[59.66645,10.63635],[59.667,10.63757],[59.66721,10.63975],[59.66708,10.6407],[59.66668,10.64216],[59.66665,10.64376],[59.66704,10.64505],[59.66767,10.64616],[59.67188,10.65038],[59.67266,10.65147],[59.67286,10.65185],[59.67317,10.65253],[59.67344,10.65317],[59.67377,10.65392],[59.67412,10.65495]]
+  },
+  smieveien: {
+    name: "Snarveien Smieveien – Heer – Heerveien (Dyrløkke–Bakker)",
+    short: "Smieveien over Heer",
+    base: 400, cap: 300, lenKm: 2.0, speed: 40,
+    coords: [[59.67412,10.65495],[59.67419,10.65463],[59.67426,10.65451],[59.67429,10.65435],[59.67429,10.6542],[59.67424,10.65392],[59.67423,10.6537],[59.67425,10.65343],[59.67429,10.65321],[59.67444,10.65233],[59.67466,10.65116],[59.67475,10.65061],[59.67481,10.65026],[59.67483,10.65016],[59.67487,10.64999],[59.67503,10.64958],[59.67521,10.6491],[59.67534,10.64923],[59.67565,10.64948],[59.67606,10.64983],[59.67651,10.65018],[59.67671,10.65036],[59.67687,10.65057],[59.67707,10.65089],[59.67736,10.65132],[59.67762,10.65163],[59.67788,10.65191],[59.67803,10.65213],[59.67817,10.6524],[59.67837,10.65289],[59.67872,10.65367],[59.67887,10.65401],[59.67904,10.6545],[59.67919,10.65499],[59.67943,10.65576],[59.67957,10.6561],[59.67973,10.65642],[59.67988,10.65675],[59.68005,10.6572],[59.68014,10.65715],[59.68025,10.65713],[59.68049,10.65714],[59.68078,10.65716],[59.68104,10.65717],[59.68126,10.65725],[59.68157,10.6574],[59.68172,10.65749],[59.68187,10.65759],[59.682,10.65768],[59.6823,10.65782],[59.68249,10.65814],[59.68271,10.65839],[59.68284,10.65855],[59.68339,10.65918],[59.68376,10.65962],[59.68404,10.65996],[59.68466,10.66069],[59.68485,10.66091],[59.68513,10.66124],[59.6855,10.66168],[59.68574,10.66198],[59.68626,10.66266],[59.68648,10.66294],[59.68656,10.66305],[59.68669,10.66324],[59.68676,10.66352],[59.68683,10.6637],[59.68672,10.66394],[59.68666,10.66413],[59.68661,10.66429]]
+  }
+};
+
+/* Stengt strekning og tunnel – kun til visning i kartet */
+const CLOSED = [[59.70191,10.73843],[59.70247,10.73798],[59.70382,10.73815],[59.70538,10.73994],[59.70673,10.73982],[59.70699,10.73953],[59.70842,10.73234],[59.71031,10.71936],[59.71166,10.71468],[59.71207,10.71254],[59.71237,10.70749],[59.71214,10.70186],[59.71149,10.69702],[59.71044,10.69253],[59.70309,10.67143],[59.7008,10.66732],[59.69785,10.66374],[59.69575,10.66206],[59.69476,10.65997]];
+const TUNNEL = [[59.69476,10.65997],[59.6935,10.6535],[59.691,10.645],[59.687,10.625],[59.681,10.585],[59.678,10.555]];
+
+const POI = [
+  {ll:[59.7019,10.7384], name:"Vassum (E6)", desc:"Her stenges E134 mot Måna"},
+  {ll:[59.69476,10.65997], name:"Måna", desc:"Rundkjøring rett før Oslofjordtunnelen – tunnelen holdes åpen"},
+  {ll:[59.67412,10.65495], name:"Dyrløkke / Drøbak City", desc:"Kjøpesenter, kollektivknutepunkt og kryss der rutene møtes"},
+  {ll:[59.6743,10.6496], name:"Smieveien 2 (Heer)", desc:"Boliggate uten gangfelt – mulig snarvei når rv. 152 korker seg"},
+  {ll:[59.6627,10.7461], name:"Korsegården (E6, Ås)", desc:"Avkjøring for trafikk sørfra"}
+];
+
+/* ---------- Justerbare parametere ---------------------------------------- */
+const PARAMS = {
+  adt:      {group:"base",  label:"Trafikk på E134 Vassum–Måna i dag", unit:" kjt/døgn", min:8000, max:22000, step:500, def:16000,
+             desc:"Årsdøgntrafikk som må finne andre veier når strekningen stenges."},
+  avvisning:{group:"base",  label:"Andel som forsvinner helt", unit:" %", min:0, max:60, step:5, def:25,
+             desc:"Velger Moss–Horten-fergen, kjører gjennom Oslo, reiser kollektivt eller dropper turen."},
+  sorandel: {group:"route", label:"Andel som skal til/fra E6 sør (Ås, Vestby, Moss)", unit:" %", min:0, max:100, step:5, def:45,
+             desc:"Alle tall gjelder begge kjøreretninger (tur + retur). Resten av trafikken skal til/fra E6 nord, mot Oslo."},
+  sor152:   {group:"route", label:"Sør-trafikk som velger rv. 152 om Korsegården", unit:" %", min:0, max:100, step:5, def:75,
+             desc:"Begge retninger. Resten av sør-trafikken kjører Osloveien og E6 forbi Nygård/Vinterbro."},
+  nordoslo: {group:"route", label:"Nord-trafikk som velger Osloveien", unit:" %", min:0, max:100, step:5, def:85,
+             desc:"Begge retninger. Resten av nord-trafikken kjører Holtbråtveien og fv. 156 Nessetveien."},
+  rush:     {group:"base",  label:"Andel av døgntrafikken i den travleste timen", unit:" %", min:7, max:12, step:1, def:9,
+             desc:"Typisk 8–10 % på pendlerveier. Høyere tall gir mer kø i rush."},
+  smie:     {group:"local", label:"Snikkjøring: andel av rv. 152-trafikken som tar Smieveien", unit:" %", min:0, max:15, step:1, def:3,
+             desc:"Snarveien fra rundkjøringen på Dyrløkke gjennom Smieveien, over Heer og via Heerveien ut på rv. 152 ved Bakker – boliggater uten gangfelt. Selv få prosent gir mange biler."}
+};
+
+const state = {};                      // gjeldende sliderverdier
+const roadState = {};                  // overstyrbar base/cap per vei
+for (const k in PARAMS) state[k] = PARAMS[k].def;
+for (const id in ROADS) roadState[id] = {base: ROADS[id].base, cap: ROADS[id].cap};
+
+/* Timeprofil for et normalt hverdagsdøgn (normaliseres til 100 %) */
+const HOURPROFILE_RAW = [0.9,0.5,0.4,0.4,0.9,2.6,5.8,8.6,7.4,4.9,4.2,4.3,4.6,5.0,6.1,7.9,8.8,7.9,5.6,4.2,3.2,2.4,1.6,1.1];
+const HP_SUM = HOURPROFILE_RAW.reduce((a,b)=>a+b,0);
+const HOURPROFILE = HOURPROFILE_RAW.map(v=>v/HP_SUM);
+const PEAKSHARE_DIR = 0.60;            // retningsandel i makstimen
+
+/* ---------- Modellen ------------------------------------------------------ */
+/* Forsinkelse per strekning: BPR-lignende køfunksjon t = t0 · (1 + α·(v/c)^β).
+   Klassisk BPR (α=0,15, β=4) gjelder motorvei uten kryss; for lokalveier med
+   rundkjøringer, avkjørsler og busstopp brukes her α=0,8 og β=4,5. */
+const BPR_A = 0.8, BPR_B = 4.5;
+function bprDelayMin(t0min, vc){
+  return t0min * BPR_A * Math.pow(vc, BPR_B);
+}
+
+function compute(){
+  const s = state;
+  const remaining = s.adt * (1 - s.avvisning/100);
+  const south = remaining * (s.sorandel/100);
+  const north = remaining - south;
+
+  const extra = {
+    rv152_east:      south * (s.sor152/100),
+    rv152_north:     south * (s.sor152/100),
+    osloveien_north: south * (1 - s.sor152/100) + north * (s.nordoslo/100),
+    holtbrat:        north * (1 - s.nordoslo/100),
+    fv156:           north * (1 - s.nordoslo/100),
+    osloveien_drobak: 0
+  };
+  extra.smieveien = (s.smie/100) * (roadState.rv152_north.base + extra.rv152_north);
+
+  const res = {remaining, south, north, seg:{}};
+  const peakFrac = s.rush/100;
+
+  for (const id in ROADS){
+    const r = ROADS[id];
+    const ex = extra[id] || 0;
+    const total = roadState[id].base + ex;
+    const peakVehDir = total * peakFrac * PEAKSHARE_DIR;      // kjt/t i makstimen, verste retning
+    const vc = peakVehDir / roadState[id].cap;
+    const t0 = r.lenKm / r.speed * 60;
+    const delay = bprDelayMin(t0, vc);
+    res.seg[id] = {extra: ex, total, peakVehDir, vc, t0, delay};
+  }
+
+  /* Dyrløkke-krysset: grov modell for ekstra ventetid der rutene møtes */
+  const dyrVol = res.seg.rv152_east.peakVehDir + res.seg.rv152_north.peakVehDir + res.seg.osloveien_drobak.peakVehDir;
+  const dyrU = dyrVol / 2400;
+  res.dyrlokkeDelay = Math.min(20, 6 * Math.pow(dyrU, 4));
+
+  /* Buss Dyrløkke → Oslo: kjører i dag E134 via Vassum. Med stenging må den
+     følge Osloveien til Vinterbro og E6 derfra. */
+  res.busOffpeak = 2;                                          // lengre trasé, uten kø
+  res.busRush = res.busOffpeak + res.seg.osloveien_north.delay + res.dyrlokkeDelay;
+
+  return res;
+}
+
+function vcLevel(vc){
+  if (vc < 0.7)  return {c:"var(--good)",     hex:"#0ca30c", t:"God flyt",      sym:"🟢"};
+  if (vc < 0.9)  return {c:"var(--warn)",     hex:"#fab219", t:"Tett trafikk",  sym:"🟡"};
+  if (vc < 1.1)  return {c:"var(--serious)",  hex:"#ec835a", t:"Kø i rush",     sym:"🟠"};
+  return           {c:"var(--critical)", hex:"#d03b3b", t:"Overbelastet", sym:"🔴"};
+}
+const fmt  = n => Math.round(n).toLocaleString("no-NO");
+const fmt1 = n => (Math.round(n*10)/10).toLocaleString("no-NO");
+
+/* ---------- Kart ---------------------------------------------------------- */
+const roadLines = {};
+let map = null;
+(function initMap(){
+  if (typeof L === "undefined"){
+    document.getElementById("map").innerHTML =
+      '<div style="display:flex;height:100%;align-items:center;justify-content:center;padding:24px;text-align:center;color:var(--ink-2)">Kartet kunne ikke lastes (ingen tilgang til kart-tjenesten akkurat nå).<br>Kalkulatoren under fungerer likevel.</div>';
+    return;
+  }
+  map = L.map("map", {scrollWheelZoom:true}).setView([59.688, 10.685], 12);
+
+  /* Kartfliser med reserveløsning: prøver OpenStreetMap først, deretter Carto.
+     Om ingen bildefliser slipper gjennom (f.eks. i en sandboxet forhåndsvisning),
+     vises en forklaring i stedet for stille grå flater. */
+  const TILESETS = [
+    {url:"https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+     att:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-bidragsytere'},
+    {url:"https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
+     att:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'}
+  ];
+  let tileIdx = 0, tileLayer = null, tilesOk = false;
+  function mountTiles(){
+    const t = TILESETS[tileIdx];
+    let errs = 0;
+    if (tileLayer) map.removeLayer(tileLayer);
+    tileLayer = L.tileLayer(t.url, {maxZoom:18, attribution:t.att});
+    tileLayer.on("tileload", ()=>{ tilesOk = true; hideTileNote(); });
+    tileLayer.on("tileerror", ()=>{
+      errs++;
+      if (errs >= 6 && !tilesOk){
+        if (tileIdx < TILESETS.length - 1){ tileIdx++; mountTiles(); }
+        else showTileNote();
+      }
+    });
+    tileLayer.addTo(map);
+  }
+  function showTileNote(){
+    if (document.getElementById("tilenote")) return;
+    const d = document.createElement("div");
+    d.id = "tilenote";
+    d.style.cssText = "position:absolute;inset:auto 10px 10px 10px;z-index:1000;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:12px;color:var(--ink-2);box-shadow:0 2px 8px rgba(0,0,0,.18)";
+    d.innerHTML = "Kartbakgrunnen slipper ikke gjennom i denne visningen (bilder fra karttjenesten blokkeres). Rutene og fargene vises likevel. Åpne filen direkte i nettleseren, eller legg den på nett, så kommer kartet frem.";
+    document.querySelector(".mapwrap").appendChild(d);
+  }
+  function hideTileNote(){
+    const d = document.getElementById("tilenote");
+    if (d) d.remove();
+  }
+  mountTiles();
+
+  L.polyline(CLOSED, {color:"#d03b3b", weight:5, dashArray:"8 8", opacity:.9})
+    .addTo(map).bindPopup("<b>E134 Vassum–Måna</b><br>Stenges i anleggsperioden (planlagt trafikkomlegging 2027–2028).");
+  L.polyline(TUNNEL, {color:"#898781", weight:4, dashArray:"4 8", opacity:.8})
+    .addTo(map).bindPopup("<b>Oslofjordtunnelen</b><br>Holdes i hovedsak åpen i hele anleggsperioden.");
+
+  for (const id in ROADS){
+    roadLines[id] = L.polyline(ROADS[id].coords, {color:"#0ca30c", weight:5, opacity:.9})
+      .addTo(map)
+      .on("click", ()=>selectSegment(id));
+  }
+  POI.forEach(p=>{
+    L.circleMarker(p.ll, {radius:5, color:"#0b0b0b", weight:1.5, fillColor:"#fcfcfb", fillOpacity:1})
+     .addTo(map).bindPopup(`<b>${p.name}</b><br>${p.desc}`);
+  });
+
+  const legend = L.control({position:"bottomleft"});
+  legend.onAdd = function(){
+    const div = L.DomUtil.create("div","maplegend");
+    div.innerHTML = `
+      <div class="row"><span class="sw" style="background:#0ca30c"></span> God flyt (under 70 % av kapasitet)</div>
+      <div class="row"><span class="sw" style="background:#fab219"></span> Tett trafikk (70–90 %)</div>
+      <div class="row"><span class="sw" style="background:#ec835a"></span> Kø i rush (90–110 %)</div>
+      <div class="row"><span class="sw" style="background:#d03b3b"></span> Overbelastet (over 110 %)</div>
+      <div class="row"><span class="sw dash"></span> E134 stengt</div>
+      <div class="row"><span class="sw tun"></span> Oslofjordtunnelen (åpen)</div>
+      <div class="row" style="color:var(--muted)">Linjetykkelse = ekstra trafikk.</div>`;
+    return div;
+  };
+  legend.addTo(map);
+})();
+
+/* ---------- Brytere ------------------------------------------------------- */
+function sliderHTML(key){
+  const p = PARAMS[key];
+  return `<div class="slider">
+    <label for="sl_${key}">${p.label}
+      <span class="val" id="val_${key}"></span></label>
+    <input type="range" id="sl_${key}" min="${p.min}" max="${p.max}" step="${p.step}" value="${state[key]}"
+      aria-describedby="d_${key}">
+    <div class="desc" id="d_${key}">${p.desc}</div>
+  </div>`;
+}
+for (const key in PARAMS){
+  document.getElementById("sliders-"+PARAMS[key].group).insertAdjacentHTML("beforeend", sliderHTML(key));
+}
+for (const key in PARAMS){
+  const el = document.getElementById("sl_"+key);
+  el.addEventListener("input", ()=>{ state[key] = +el.value; update(); });
+}
+
+/* Avansert-tabell */
+const advtable = document.getElementById("advtable");
+advtable.innerHTML = "<tr><td></td><td style='color:var(--muted)'>Grunntrafikk<br>(kjt/døgn)</td><td style='color:var(--muted)'>Kapasitet<br>(kjt/t/retn.)</td></tr>" +
+  Object.keys(ROADS).map(id=>`<tr><td>${ROADS[id].short}</td>
+    <td><input type="number" id="base_${id}" value="${roadState[id].base}" min="0" step="100"></td>
+    <td><input type="number" id="cap_${id}" value="${roadState[id].cap}" min="100" step="50"></td></tr>`).join("");
+for (const id in ROADS){
+  document.getElementById("base_"+id).addEventListener("input", e=>{ roadState[id].base = Math.max(0,+e.target.value||0); update(); });
+  document.getElementById("cap_"+id).addEventListener("input", e=>{ roadState[id].cap = Math.max(100,+e.target.value||100); update(); });
+}
+
+/* ---------- Segmentkort --------------------------------------------------- */
+let selected = "rv152_north";
+const seggrid = document.getElementById("seggrid");
+function renderSegments(res){
+  seggrid.innerHTML = Object.keys(ROADS).map(id=>{
+    const r = ROADS[id], v = res.seg[id], lv = vcLevel(v.vc);
+    return `<div class="seg ${id===selected?"sel":""}" style="border-left-color:${lv.hex}" data-id="${id}" role="button" tabindex="0"
+      aria-label="${r.name}: ${fmt(v.extra)} ekstra kjøretøy per døgn, ${lv.t}">
+      <div class="name">${r.short}</div>
+      <div class="nums">
+        <div class="num"><b class="delta ${v.extra>0?"up":""}">${v.extra>0?"+":""}${fmt(v.extra)}</b><span>ekstra kjt/døgn</span></div>
+        <div class="num"><b>${fmt(v.total)}</b><span>totalt kjt/døgn</span></div>
+        <div class="num"><b>${v.delay>=0.5?"+"+fmt1(v.delay)+" min":"–"}</b><span>forsinkelse i rush</span></div>
+      </div>
+      <span class="chip" style="color:${lv.hex}"><span class="dot" style="background:${lv.hex}"></span>${lv.t} · ${Math.round(v.vc*100)} % av kapasitet</span>
+    </div>`;
+  }).join("");
+  seggrid.querySelectorAll(".seg").forEach(el=>{
+    el.addEventListener("click", ()=>selectSegment(el.dataset.id));
+    el.addEventListener("keydown", e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();selectSegment(el.dataset.id);} });
+  });
+}
+function selectSegment(id){
+  selected = id;
+  update();
+  if (roadLines[id]) roadLines[id].openPopup();
+}
+
+/* ---------- Timeprofil-diagram (SVG) -------------------------------------- */
+const chart = document.getElementById("chart");
+const charttip = document.getElementById("charttip");
+const chartwrap = document.getElementById("chartwrap");
+let lastHours = [];
+
+function renderChart(res){
+  const r = ROADS[selected], v = res.seg[selected], rs = roadState[selected];
+  document.getElementById("charttitle").textContent =
+    `Trafikk over døgnet: ${r.short} (begge retninger)`;
+  const capBoth = rs.cap * 2;
+  const hours = HOURPROFILE.map((f,h)=>({h, base: rs.base*f, extra: v.extra*f, total: v.total*f}));
+  lastHours = hours;
+  const maxV = Math.max(capBoth, ...hours.map(o=>o.total)) * 1.12;
+
+  const W=640, H=260, padL=46, padR=10, padT=16, padB=30;
+  const iw = W-padL-padR, ih = H-padT-padB;
+  const x = h => padL + h*(iw/24);
+  const y = val => padT + ih - (val/maxV)*ih;
+  const bw = iw/24;
+
+  let g = "";
+  /* rutenett */
+  const stepv = niceStep(maxV);
+  for (let val=stepv; val<maxV; val+=stepv){
+    g += `<line x1="${padL}" y1="${y(val)}" x2="${W-padR}" y2="${y(val)}" stroke="var(--grid)" stroke-width="1"/>`;
+    g += `<text x="${padL-6}" y="${y(val)+4}" text-anchor="end" font-size="10" fill="var(--muted)">${fmt(val)}</text>`;
+  }
+  /* stolper: grunntrafikk + ekstra stablet, 2px mellomrom */
+  hours.forEach(o=>{
+    const bx = x(o.h)+1, w = bw-2;
+    const yBase = y(o.base), yTot = y(o.total);
+    g += `<rect x="${bx}" y="${yBase}" width="${w}" height="${padT+ih-yBase}" fill="var(--series-soft)" rx="2"/>`;
+    if (o.extra > 0.5){
+      const hE = Math.max(0, yBase - yTot - 2);
+      if (hE>0) g += `<rect x="${bx}" y="${yTot}" width="${w}" height="${hE}" fill="var(--series)" rx="2"/>`;
+    }
+  });
+  /* kapasitetslinje */
+  g += `<line x1="${padL}" y1="${y(capBoth)}" x2="${W-padR}" y2="${y(capBoth)}" stroke="var(--critical)" stroke-width="2" stroke-dasharray="6 5"/>`;
+  g += `<text x="${W-padR}" y="${y(capBoth)-5}" text-anchor="end" font-size="10" font-weight="600" fill="var(--critical)">Omtrentlig kapasitet (${fmt(capBoth)} kjt/t)</text>`;
+  /* akser */
+  g += `<line x1="${padL}" y1="${padT+ih}" x2="${W-padR}" y2="${padT+ih}" stroke="var(--axisline)" stroke-width="1"/>`;
+  for (let h=0; h<=24; h+=3){
+    g += `<text x="${x(h)}" y="${H-10}" text-anchor="middle" font-size="10" fill="var(--muted)">${String(h).padStart(2,"0")}</text>`;
+  }
+  /* enkel forklaring */
+  g += `<g font-size="10" fill="var(--ink-2)">
+    <rect x="${padL}" y="1" width="9" height="9" fill="var(--series-soft)" rx="2"/><text x="${padL+13}" y="9">Dagens trafikk</text>
+    <rect x="${padL+95}" y="1" width="9" height="9" fill="var(--series)" rx="2"/><text x="${padL+108}" y="9">Ekstra fra E134</text></g>`;
+  /* usynlige hover-felt */
+  hours.forEach(o=>{
+    g += `<rect class="hov" data-h="${o.h}" x="${x(o.h)}" y="${padT}" width="${bw}" height="${ih}" fill="transparent"/>`;
+  });
+  chart.innerHTML = g;
+
+  chart.querySelectorAll(".hov").forEach(el=>{
+    el.addEventListener("mousemove", ev=>{
+      const o = lastHours[+el.dataset.h];
+      charttip.style.display = "block";
+      charttip.innerHTML = `<b>kl. ${String(o.h).padStart(2,"0")}–${String((o.h+1)%24).padStart(2,"0")}</b><br>
+        Dagens: <b>${fmt(o.base)}</b> kjt/t<br>Ekstra: <b>+${fmt(o.extra)}</b> kjt/t<br>Totalt: <b>${fmt(o.total)}</b> kjt/t`;
+      const rect = chartwrap.getBoundingClientRect();
+      let lx = ev.clientX - rect.left + 12, ly = ev.clientY - rect.top - 10;
+      if (lx > rect.width - 150) lx -= 165;
+      charttip.style.left = lx+"px"; charttip.style.top = ly+"px";
+    });
+    el.addEventListener("mouseleave", ()=>{ charttip.style.display="none"; });
+  });
+
+  renderTable();
+}
+function niceStep(maxV){
+  const raw = maxV/5;
+  const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+  for (const m of [1,2,2.5,5,10]) if (raw <= m*pow) return m*pow;
+  return 10*pow;
+}
+function renderTable(){
+  const wrap = document.getElementById("tablewrap");
+  if (wrap.hidden) return;
+  wrap.innerHTML = `<table class="datatable"><tr><th>Time</th><th>Dagens (kjt/t)</th><th>Ekstra (kjt/t)</th><th>Totalt (kjt/t)</th></tr>` +
+    lastHours.map(o=>`<tr><td>kl. ${String(o.h).padStart(2,"0")}–${String((o.h+1)%24).padStart(2,"0")}</td><td>${fmt(o.base)}</td><td>+${fmt(o.extra)}</td><td>${fmt(o.total)}</td></tr>`).join("") + "</table>";
+}
+document.getElementById("tabletoggle").addEventListener("click", e=>{
+  e.preventDefault();
+  const wrap = document.getElementById("tablewrap");
+  wrap.hidden = !wrap.hidden;
+  e.target.textContent = wrap.hidden ? "Vis som tabell" : "Skjul tabell";
+  renderTable();
+});
+
+/* ---------- Reisetider ---------------------------------------------------- */
+function travelRows(res){
+  const s = res.seg;
+  const rows = [
+    {name:"Dyrløkke → E6 (mot Oslo), via Osloveien",
+     t0: s.rv152_north.t0 + s.osloveien_north.t0 + 1,
+     delay: s.osloveien_north.delay + res.dyrlokkeDelay,
+     note:"I dag: ca. 8 min via E134"},
+    {name:"Dyrløkke → E6 Korsegården (mot Ås/Moss), via rv. 152",
+     t0: s.rv152_east.t0 + 1,
+     delay: s.rv152_east.delay + res.dyrlokkeDelay,
+     note:""},
+    {name:"Drøbak sentrum → Dyrløkke (Osloveien)",
+     t0: s.osloveien_drobak.t0,
+     delay: s.osloveien_drobak.delay + res.dyrlokkeDelay,
+     note:"Forsinkelsen skyldes i hovedsak køen ved Dyrløkke"},
+    {name:"Måna → E6 (tunneltrafikk vestfra), via Osloveien",
+     t0: s.osloveien_north.t0 + 1,
+     delay: s.osloveien_north.delay,
+     note:"I dag: ca. 5 min via E134"}
+  ];
+  return rows;
+}
+function renderTravel(res){
+  const rows = travelRows(res);
+  document.getElementById("tttable").innerHTML =
+    `<tr><th>Strekning</th><th>Utenom rush</th><th>I rush</th></tr>` +
+    rows.map(r=>`<tr><td>${r.name}${r.note?`<br><small style="color:var(--muted)">${r.note}</small>`:""}</td>
+      <td>ca. ${fmt1(r.t0)} min</td>
+      <td><b>ca. ${fmt1(r.t0 + r.delay)} min</b>${r.delay>=0.5?` <span class="up">(+${fmt1(r.delay)})</span>`:""}</td></tr>`).join("");
+}
+
+/* ---------- Lokale konsekvenser ------------------------------------------- */
+function renderLocal(res){
+  const s = res.seg;
+  const smiePeak = s.smieveien.total * (state.rush/100);
+  const busR = res.busRush, busO = res.busOffpeak;
+  document.getElementById("localstats").innerHTML = `
+    <div class="stat warnbox">
+      <div class="t">🚸 Smieveien over Heer</div>
+      <div class="v">${fmt(s.smieveien.total)} <small>kjt/døgn</small></div>
+      <div class="d">Dagens ca. ${fmt(roadState.smieveien.base)} + <b>${fmt(s.smieveien.extra)}</b> i snikkjøring
+      (ruten Dyrløkke → Smieveien → Heer → Heerveien → rv. 152 ved Bakker).
+      I den travleste timen: ca. <b>${fmt(smiePeak)} biler</b> – gjennom boliggater uten gangfelt, mye brukt av gående.</div>
+    </div>
+    <div class="stat">
+      <div class="t">🚌 Buss Dyrløkke → Oslo</div>
+      <div class="v">+${fmt1(busR)} <small>min i rush</small></div>
+      <div class="d">Ca. +${fmt1(busO)} min utenom rush (lengre trasé om Vinterbro), pluss kø på Osloveien og ved Dyrløkke i rushtiden.</div>
+    </div>
+    <div class="stat">
+      <div class="t">🛒 Drøbak City / Dyrløkke</div>
+      <div class="v">+${fmt(s.rv152_east.extra)} <small>kjt/døgn forbi</small></div>
+      <div class="d">Gjennomgangstrafikken passerer kjøpesenteret og kollektivknutepunktet. Estimert ekstra ventetid i krysset i rush: ca. <b>${fmt1(res.dyrlokkeDelay)} min</b>.</div>
+    </div>
+    <div class="stat">
+      <div class="t">🏘️ Drøbak sentrum → Dyrløkke</div>
+      <div class="v">+${fmt1(s.osloveien_drobak.delay + res.dyrlokkeDelay)} <small>min i rush</small></div>
+      <div class="d">Ingen omkjøringstrafikk på selve strekningen, men alt lokalt kjøremønster møter den økte trafikken ved Dyrløkke.</div>
+    </div>`;
+}
+
+/* ---------- Metode og kilder ---------------------------------------------- */
+document.getElementById("methodbody").innerHTML = `
+  <h3>Hva vet vi fra Statens vegvesen?</h3>
+  <ul>
+    <li>E134 mellom Vassum (E6) og Måna må stenges i løpet av anleggsperioden. Omfanget er ikke endelig avklart, men en <em>kortere sammenhengende stengeperiode</em> (ca. 2 år) vurderes som bedre enn mange år med innsnevringer og uforutsigbarhet, og kan gi åpning av ny firefelts vei ca. ett år tidligere.</li>
+    <li>Trafikkomlegging Vassum–Måna er i overordnet fremdriftsplan lagt til 2027–2028.</li>
+    <li>Oslofjordtunnelen holdes i hovedsak åpen i hele anleggsperioden (korte stengninger ved sprengning).</li>
+    <li>Gang- og sykkelveier langs Osloveien ble utbedret 2021–2022 nettopp for å gjøre veien klar for mer trafikk.</li>
+    <li>Vegvesenets egen trafikkanalyse og trafikksikkerhetsinspeksjoner for anleggsperioden er under utarbeidelse; tiltak avklares med Frogn kommune og Akershus fylkeskommune.</li>
+  </ul>
+  <h3>Slik regner kalkulatoren</h3>
+  <ul>
+    <li>Trafikken som i dag bruker E134 Vassum–Måna (justerbar, standard 16&nbsp;000 kjt/døgn) reduseres med en «forsvinner-andel» (ferge, via Oslo, kollektiv, avlyste turer). Resten fordeles på rutene etter prosentsatsene du velger. Alle trafikktall er ÅDT, altså summen av begge kjøreretninger over døgnet – fordelingen sør/nord handler om hvilken ende av E6 turen hører til, ikke om kjøreretning. Kjøreretning kommer inn i rushberegningen, der 60&nbsp;% av makstimetrafikken antas å gå i den tyngste retningen.</li>
+    <li>Forsinkelse per strekning beregnes med en BPR-lignende køfunksjon: t = t₀ · (1 + 0,8 · (volum/kapasitet)⁴·⁵). Den klassiske BPR-formelen (0,15 / 4) gjelder motorvei; her er kurven gjort brattere for å fange kryss, avkjørsler og busstopp på lokalvei. Volum regnes i den travleste timen (justerbar andel av døgnet, 60&nbsp;% i verste retning).</li>
+    <li>Krysset på Dyrløkke er modellert grovt som en felles flaskehals for rv. 152, Osloveien fra Drøbak og handleturer til Drøbak City.</li>
+    <li>Grunntrafikk og kapasitet per vei er anslag og kan endres under «Avansert». Reelle ÅDT-tall finnes i Statens vegvesens trafikkdata-kart.</li>
+    <li>Timeprofilen er et typisk pendlerdøgn med topper kl. 07–09 og 15–17.</li>
+  </ul>
+  <h3>Viktige forbehold</h3>
+  <p>Dette er en forenklet, uoffisiell modell laget av innbyggere – ikke en trafikkfaglig analyse. Den tar ikke hensyn til lysregulering, anleggstrafikk, sesongvariasjon eller at folk endrer reisetidspunkt når det korker seg. Bruk den til å utforske «hva hvis», ikke som fasit. Rutene på kartet følger veinettet i OpenStreetMap; Smieveien er tegnet omtrentlig.</p>
+  <h3>Kilder</h3>
+  <ul>
+    <li><a href="https://www.vegvesen.no/vegprosjekter/prosjekt/oslofjordforbindelsen/" target="_blank" rel="noopener">Statens vegvesen: E134 Oslofjordforbindelsen – byggetrinn 2</a></li>
+    <li><a href="https://www.vegvesen.no/vegprosjekter/prosjekt/oslofjordforbindelsen/nyhetsarkiv/informasjonsmoter-for-e134-oslofjordforbindelsen--byggetrinn-2/" target="_blank" rel="noopener">Presentasjon fra informasjonsmøtet i Frogn, 26. august 2026</a></li>
+    <li><a href="https://www.vegvesen.no/trafikkdata/" target="_blank" rel="noopener">Statens vegvesen: Trafikkdata (reelle ÅDT-tall)</a></li>
+  </ul>`;
+
+/* ---------- Del scenario / nullstill --------------------------------------- */
+function currentHash(){
+  return "#" + Object.keys(PARAMS).map(k=>k+"="+state[k]).join("&");
+}
+function writeHash(){
+  try { history.replaceState(null,"",currentHash()); } catch(e){ /* sandboxede visninger tillater ikke dette */ }
+}
+function readHash(){
+  if (!location.hash) return;
+  location.hash.slice(1).split("&").forEach(kv=>{
+    const [k,v] = kv.split("=");
+    if (PARAMS[k] && v!==undefined && !isNaN(+v)){
+      state[k] = Math.min(PARAMS[k].max, Math.max(PARAMS[k].min, +v));
+      const el = document.getElementById("sl_"+k);
+      if (el) el.value = state[k];
+    }
+  });
+}
+document.getElementById("sharebtn").addEventListener("click", async ()=>{
+  writeHash();
+  const link = location.href.split("#")[0] + currentHash();
+  const msg = document.getElementById("copiedmsg");
+  try {
+    await navigator.clipboard.writeText(link);
+    msg.hidden=false; setTimeout(()=>msg.hidden=true, 2500);
+  } catch(e){
+    let box = document.getElementById("linkbox");
+    if (!box){
+      box = document.createElement("input");
+      box.id = "linkbox"; box.readOnly = true;
+      box.style.cssText = "width:100%;margin-top:8px;font:12px/1.4 inherit;padding:6px 8px;border:1px solid var(--axisline);border-radius:8px;background:var(--surface);color:var(--ink)";
+      document.querySelector(".btnrow").after(box);
+    }
+    box.value = link; box.hidden = false; box.focus(); box.select();
+  }
+});
+document.getElementById("resetbtn").addEventListener("click", ()=>{
+  for (const k in PARAMS){ state[k]=PARAMS[k].def; document.getElementById("sl_"+k).value = state[k]; }
+  for (const id in ROADS){
+    roadState[id] = {base: ROADS[id].base, cap: ROADS[id].cap};
+    document.getElementById("base_"+id).value = roadState[id].base;
+    document.getElementById("cap_"+id).value = roadState[id].cap;
+  }
+  try { history.replaceState(null,"",location.pathname); } catch(e){}
+  update();
+});
+
+/* ---------- Hovedoppdatering ----------------------------------------------- */
+function update(){
+  for (const k in PARAMS){
+    document.getElementById("val_"+k).textContent = state[k].toLocaleString("no-NO") + PARAMS[k].unit;
+  }
+  const res = compute();
+  for (const id in ROADS){
+    if (!roadLines[id]) break;
+    const v = res.seg[id], lv = vcLevel(v.vc);
+    const w = 3.5 + Math.min(9, v.extra/900);
+    roadLines[id].setStyle({color: lv.hex, weight: w});
+    roadLines[id].bindPopup(`<b>${ROADS[id].name}</b><br>
+      Ekstra: <b>${v.extra>0?"+":""}${fmt(v.extra)}</b> kjt/døgn &nbsp;·&nbsp; Totalt: <b>${fmt(v.total)}</b> kjt/døgn<br>
+      Makstime: ca. ${fmt(v.peakVehDir)} kjt/t i verste retning (${Math.round(v.vc*100)} % av kapasitet)<br>
+      ${lv.sym} ${lv.t}${v.delay>=0.5 ? " · ca. +"+fmt1(v.delay)+" min i rush" : ""}`);
+  }
+  renderSegments(res);
+  renderChart(res);
+  renderTravel(res);
+  renderLocal(res);
+  writeHash();
+}
+
+readHash();
+update();
+</script>
+</body>
+</html>
