@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="no">
 <head>
@@ -165,6 +166,14 @@ footer.site{max-width:1400px; margin:0 auto; padding:0 22px 34px; color:var(--mu
         <div id="sliders-route"></div>
       </div>
       <div class="group">
+        <div class="gtitle">Tungtrafikk og vinter</div>
+        <div id="sliders-tung"></div>
+        <div class="slider">
+          <label style="cursor:pointer"><span><input type="checkbox" id="cb_vinter" style="accent-color:var(--series);margin-right:6px">Vinterføre i bakkene</span></label>
+          <div class="desc">Reduserer kapasiteten ca. 30 % på strekningene med Ottarsrudbakken, Skarphella og Rundvollbakkene, slik en dag med glatte bakker og fastkjørte vogntog gjør.</div>
+        </div>
+      </div>
+      <div class="group">
         <div class="gtitle">Lokale forhold</div>
         <div id="sliders-local"></div>
       </div>
@@ -274,6 +283,7 @@ const ROADS = {
   smieveien: {
     name: "Snarveien Smieveien – Heer – Heerveien (Dyrløkke–Bakker)",
     short: "Smieveien over Heer",
+    kind: "boliggate",
     base: 400, cap: 300, lenKm: 2.0, speed: 40,
     coords: [[59.67412,10.65495],[59.67419,10.65463],[59.67426,10.65451],[59.67429,10.65435],[59.67429,10.6542],[59.67424,10.65392],[59.67423,10.6537],[59.67425,10.65343],[59.67429,10.65321],[59.67444,10.65233],[59.67466,10.65116],[59.67475,10.65061],[59.67481,10.65026],[59.67483,10.65016],[59.67487,10.64999],[59.67503,10.64958],[59.67521,10.6491],[59.67534,10.64923],[59.67565,10.64948],[59.67606,10.64983],[59.67651,10.65018],[59.67671,10.65036],[59.67687,10.65057],[59.67707,10.65089],[59.67736,10.65132],[59.67762,10.65163],[59.67788,10.65191],[59.67803,10.65213],[59.67817,10.6524],[59.67837,10.65289],[59.67872,10.65367],[59.67887,10.65401],[59.67904,10.6545],[59.67919,10.65499],[59.67943,10.65576],[59.67957,10.6561],[59.67973,10.65642],[59.67988,10.65675],[59.68005,10.6572],[59.68014,10.65715],[59.68025,10.65713],[59.68049,10.65714],[59.68078,10.65716],[59.68104,10.65717],[59.68126,10.65725],[59.68157,10.6574],[59.68172,10.65749],[59.68187,10.65759],[59.682,10.65768],[59.6823,10.65782],[59.68249,10.65814],[59.68271,10.65839],[59.68284,10.65855],[59.68339,10.65918],[59.68376,10.65962],[59.68404,10.65996],[59.68466,10.66069],[59.68485,10.66091],[59.68513,10.66124],[59.6855,10.66168],[59.68574,10.66198],[59.68626,10.66266],[59.68648,10.66294],[59.68656,10.66305],[59.68669,10.66324],[59.68676,10.66352],[59.68683,10.6637],[59.68672,10.66394],[59.68666,10.66413],[59.68661,10.66429]]
   }
@@ -287,9 +297,20 @@ const POI = [
   {ll:[59.7019,10.7384], name:"Vassum (E6)", desc:"Her stenges E134 mot Måna"},
   {ll:[59.69476,10.65997], name:"Måna", desc:"Rundkjøring rett før Oslofjordtunnelen – tunnelen holdes åpen"},
   {ll:[59.67412,10.65495], name:"Dyrløkke / Drøbak City", desc:"Kjøpesenter, kollektivknutepunkt og kryss der rutene møtes"},
-  {ll:[59.6743,10.6496], name:"Smieveien 2 (Heer)", desc:"Boliggate uten gangfelt – mulig snarvei når rv. 152 korker seg"},
   {ll:[59.6627,10.7461], name:"Korsegården (E6, Ås)", desc:"Avkjøring for trafikk sørfra"}
 ];
+
+/* Kjente risikopunkter for tungtrafikk og vinterføre */
+const RISKPOINTS = [
+  {ll:[59.68480,10.66860], name:"Ottarsrudbakken", road:"rv152_north",
+   desc:"Bratt bakke opp mot Ottarsrud-krysset, med krapp sving (ca. 110°) der rv. 152 og Osloveien møtes. Krevende for vogntog – særlig med henger – og et kjent sted for fastkjøring på vinterføre."},
+  {ll:[59.7174,10.6632], name:"Skarphella", road:"holtbrat",
+   desc:"Bakke i dårlig forfatning som tåler dagens belastning dårlig. Et vogntog som står fast her vinterstid sperrer veien."},
+  {ll:[59.71472,10.70808], name:"Rundvollbakkene", road:"fv156",
+   desc:"Bratte bakker der biler og vogntog står fast på vinterføre."}
+];
+/* Strekninger med bakker som rammes av vinterføre (redusert kapasitet i vintermodus) */
+const WINTER_ROADS = {rv152_north:1, holtbrat:1, fv156:1};
 
 /* ---------- Justerbare parametere ---------------------------------------- */
 const PARAMS = {
@@ -305,6 +326,8 @@ const PARAMS = {
              desc:"Begge retninger. Resten av nord-trafikken kjører Holtbråtveien og fv. 156 Nessetveien."},
   rush:     {group:"base",  label:"Andel av døgntrafikken i den travleste timen", unit:" %", min:7, max:12, step:1, def:9,
              desc:"Typisk 8–10 % på pendlerveier. Høyere tall gir mer kø i rush."},
+  tung:     {group:"tung", label:"Andel tunge kjøretøy (lastebil/vogntog)", unit:" %", min:5, max:25, step:1, def:12,
+             desc:"Tungtrafikkandelen på E134 i dag. Brukes til å anslå vogntog per døgn over Ottarsrudbakken, Skarphella og Rundvollbakkene."},
   smie:     {group:"local", label:"Snikkjøring: andel av rv. 152-trafikken som tar Smieveien", unit:" %", min:0, max:15, step:1, def:3,
              desc:"Snarveien fra rundkjøringen på Dyrløkke gjennom Smieveien, over Heer og via Heerveien ut på rv. 152 ved Bakker – boliggater uten gangfelt. Selv få prosent gir mange biler."}
 };
@@ -312,6 +335,7 @@ const PARAMS = {
 const state = {};                      // gjeldende sliderverdier
 const roadState = {};                  // overstyrbar base/cap per vei
 for (const k in PARAMS) state[k] = PARAMS[k].def;
+state.vinter = 0;
 for (const id in ROADS) roadState[id] = {base: ROADS[id].base, cap: ROADS[id].cap};
 
 /* Timeprofil for et normalt hverdagsdøgn (normaliseres til 100 %) */
@@ -353,10 +377,12 @@ function compute(){
     const ex = extra[id] || 0;
     const total = roadState[id].base + ex;
     const peakVehDir = total * peakFrac * PEAKSHARE_DIR;      // kjt/t i makstimen, verste retning
-    const vc = peakVehDir / roadState[id].cap;
+    const cap = roadState[id].cap * (state.vinter && WINTER_ROADS[id] ? 0.7 : 1);
+    const vc = peakVehDir / cap;
     const t0 = r.lenKm / r.speed * 60;
     const delay = bprDelayMin(t0, vc);
-    res.seg[id] = {extra: ex, total, peakVehDir, vc, t0, delay};
+    const tunge = ex * (s.tung/100);                          // ekstra tunge kjøretøy per døgn
+    res.seg[id] = {extra: ex, total, peakVehDir, vc, t0, delay, tunge};
   }
 
   /* Dyrløkke-krysset: grov modell for ekstra ventetid der rutene møtes */
@@ -372,6 +398,18 @@ function compute(){
   return res;
 }
 
+/* Boliggater/skoleveier vurderes etter total trafikk (bomiljø og myke
+   trafikanter), ikke etter om bilene flyter godt. Grenser inspirert av
+   vanlige planfaglige tommelfingerregler for gater uten fortau. */
+function boliggateLevel(total){
+  if (total < 500)   return {c:"var(--good)",     hex:"#0ca30c", t:"Akseptabelt for boliggate", sym:"🟢"};
+  if (total < 1000)  return {c:"var(--warn)",     hex:"#fab219", t:"Belastende for bomiljøet",  sym:"🟡"};
+  if (total < 2000)  return {c:"var(--serious)",  hex:"#ec835a", t:"Uholdbart som skolevei",    sym:"🟠"};
+  return               {c:"var(--critical)", hex:"#d03b3b", t:"Kritisk for myke trafikanter", sym:"🔴"};
+}
+function levelFor(id, v){
+  return ROADS[id].kind === "boliggate" ? boliggateLevel(v.total) : vcLevel(v.vc);
+}
 function vcLevel(vc){
   if (vc < 0.7)  return {c:"var(--good)",     hex:"#0ca30c", t:"God flyt",      sym:"🟢"};
   if (vc < 0.9)  return {c:"var(--warn)",     hex:"#fab219", t:"Tett trafikk",  sym:"🟡"};
@@ -383,6 +421,7 @@ const fmt1 = n => (Math.round(n*10)/10).toLocaleString("no-NO");
 
 /* ---------- Kart ---------------------------------------------------------- */
 const roadLines = {};
+const riskMarkers = [];
 let map = null;
 (function initMap(){
   if (typeof L === "undefined"){
@@ -445,6 +484,10 @@ let map = null;
     L.circleMarker(p.ll, {radius:5, color:"#0b0b0b", weight:1.5, fillColor:"#fcfcfb", fillOpacity:1})
      .addTo(map).bindPopup(`<b>${p.name}</b><br>${p.desc}`);
   });
+  RISKPOINTS.forEach(p=>{
+    const icon = L.divIcon({className:"", html:'<div style="font-size:19px;line-height:19px">⚠️</div>', iconSize:[19,19], iconAnchor:[10,10]});
+    riskMarkers.push({marker: L.marker(p.ll, {icon}).addTo(map), p});
+  });
 
   const legend = L.control({position:"bottomleft"});
   legend.onAdd = function(){
@@ -456,7 +499,8 @@ let map = null;
       <div class="row"><span class="sw" style="background:#d03b3b"></span> Overbelastet (over 110 %)</div>
       <div class="row"><span class="sw dash"></span> E134 stengt</div>
       <div class="row"><span class="sw tun"></span> Oslofjordtunnelen (åpen)</div>
-      <div class="row" style="color:var(--muted)">Linjetykkelse = ekstra trafikk.</div>`;
+      <div class="row">⚠️ Risikopunkt: vogntog, sving, vinterføre</div>
+      <div class="row" style="color:var(--muted)">Linjetykkelse = ekstra trafikk.<br>Boliggater farges etter total trafikk<br>(bomiljø), ikke etter bilflyt.</div>`;
     return div;
   };
   legend.addTo(map);
@@ -480,6 +524,9 @@ for (const key in PARAMS){
   const el = document.getElementById("sl_"+key);
   el.addEventListener("input", ()=>{ state[key] = +el.value; update(); });
 }
+document.getElementById("cb_vinter").addEventListener("change", e=>{
+  state.vinter = e.target.checked ? 1 : 0; update();
+});
 
 /* Avansert-tabell */
 const advtable = document.getElementById("advtable");
@@ -497,7 +544,7 @@ let selected = "rv152_north";
 const seggrid = document.getElementById("seggrid");
 function renderSegments(res){
   seggrid.innerHTML = Object.keys(ROADS).map(id=>{
-    const r = ROADS[id], v = res.seg[id], lv = vcLevel(v.vc);
+    const r = ROADS[id], v = res.seg[id], lv = levelFor(id, v);
     return `<div class="seg ${id===selected?"sel":""}" style="border-left-color:${lv.hex}" data-id="${id}" role="button" tabindex="0"
       aria-label="${r.name}: ${fmt(v.extra)} ekstra kjøretøy per døgn, ${lv.t}">
       <div class="name">${r.short}</div>
@@ -506,7 +553,7 @@ function renderSegments(res){
         <div class="num"><b>${fmt(v.total)}</b><span>totalt kjt/døgn</span></div>
         <div class="num"><b>${v.delay>=0.5?"+"+fmt1(v.delay)+" min":"–"}</b><span>forsinkelse i rush</span></div>
       </div>
-      <span class="chip" style="color:${lv.hex}"><span class="dot" style="background:${lv.hex}"></span>${lv.t} · ${Math.round(v.vc*100)} % av kapasitet</span>
+      <span class="chip" style="color:${lv.hex}"><span class="dot" style="background:${lv.hex}"></span>${lv.t}${r.kind==="boliggate" ? "" : " · "+Math.round(v.vc*100)+" % av kapasitet"}</span>
     </div>`;
   }).join("");
   seggrid.querySelectorAll(".seg").forEach(el=>{
@@ -671,6 +718,21 @@ function renderLocal(res){
       <div class="t">🏘️ Drøbak sentrum → Dyrløkke</div>
       <div class="v">+${fmt1(s.osloveien_drobak.delay + res.dyrlokkeDelay)} <small>min i rush</small></div>
       <div class="d">Ingen omkjøringstrafikk på selve strekningen, men alt lokalt kjøremønster møter den økte trafikken ved Dyrløkke.</div>
+    </div>
+    <div class="stat warnbox">
+      <div class="t">🚛 Tungtrafikk over bakkene</div>
+      <div class="v">+${fmt(s.rv152_north.tunge)} <small>tunge kjt/døgn over Ottarsrudbakken</small></div>
+      <div class="d">I tillegg ca. +${fmt(s.holtbrat.tunge)} tunge kjt/døgn over Skarphella og Rundvollbakkene.
+      Krapp sving (ca. 110°) ved Ottarsrudbakken og bratte bakker er krevende for vogntog med henger.
+      E134 er dimensjonert for tungtransport – lokal- og fylkesveiene har svakere standard, og Skarphella er i dårlig forfatning allerede.
+      Faktisk bruksklasse/tillatt akseltrykk per vei kan slås opp i NVDB Vegkart.</div>
+    </div>
+    <div class="stat ${state.vinter ? "warnbox" : ""}">
+      <div class="t">🚑 Beredskap Nordre Frogn og Nesodden</div>
+      <div class="v">${state.vinter ? "Uholdbar på vinterføre" : "Sårbar"}</div>
+      <div class="d">Med E134 stengt går alle ruter nordover gjennom bakker der kjøretøy setter seg fast vinterstid
+      (Ottarsrudbakken, Skarphella, Rundvollbakkene). Ett fastkjørt vogntog i feil bakke kan da sperre
+      utrykningsruten til Nordre Frogn og Nesodden${state.vinter ? " – i vintermodusen er kapasiteten i bakkene redusert 30&nbsp;%" : ""}.</div>
     </div>`;
 }
 
@@ -691,6 +753,8 @@ document.getElementById("methodbody").innerHTML = `
     <li>Krysset på Dyrløkke er modellert grovt som en felles flaskehals for rv. 152, Osloveien fra Drøbak og handleturer til Drøbak City.</li>
     <li>Grunntrafikk og kapasitet per vei er anslag og kan endres under «Avansert». Reelle ÅDT-tall finnes i Statens vegvesens trafikkdata-kart.</li>
     <li>Timeprofilen er et typisk pendlerdøgn med topper kl. 07–09 og 15–17.</li>
+    <li>Boliggater/skoleveier (som Smieveien-ruten over Heer) farges etter <em>total trafikkmengde</em>, ikke etter bilflyt: under 500 kjt/døgn regnes som akseptabelt, 500–1&nbsp;000 belastende, 1&nbsp;000–2&nbsp;000 uholdbart som skolevei, og over 2&nbsp;000 kritisk. Dette er planfaglige tommelfingerregler for gater uten fortau/gangfelt – god flyt for bilene kan samtidig være uholdbart for gående.</li>
+    <li>Tungtrafikk anslås som en justerbar andel av omkjøringstrafikken og vises for risikopunktene Ottarsrudbakken (bratt bakke, ca. 110° sving), Skarphella (dårlig forfatning) og Rundvollbakkene. «Vinterføre i bakkene» reduserer kapasiteten ca. 30&nbsp;% på disse strekningene. Faktisk bruksklasse og tillatt akseltrykk per vei finnes i <a href="https://vegkart.atlas.vegvesen.no/" target="_blank" rel="noopener">NVDB Vegkart</a>.</li>
   </ul>
   <h3>Viktige forbehold</h3>
   <p>Dette er en forenklet, uoffisiell modell laget av innbyggere – ikke en trafikkfaglig analyse. Den tar ikke hensyn til lysregulering, anleggstrafikk, sesongvariasjon eller at folk endrer reisetidspunkt når det korker seg. Bruk den til å utforske «hva hvis», ikke som fasit. Rutene på kartet følger veinettet i OpenStreetMap; Smieveien er tegnet omtrentlig.</p>
@@ -703,7 +767,9 @@ document.getElementById("methodbody").innerHTML = `
 
 /* ---------- Del scenario / nullstill --------------------------------------- */
 function currentHash(){
-  return "#" + Object.keys(PARAMS).map(k=>k+"="+state[k]).join("&");
+  const parts = Object.keys(PARAMS).map(k=>k+"="+state[k]);
+  parts.push("vinter="+state.vinter);
+  return "#" + parts.join("&");
 }
 function writeHash(){
   try { history.replaceState(null,"",currentHash()); } catch(e){ /* sandboxede visninger tillater ikke dette */ }
@@ -712,7 +778,11 @@ function readHash(){
   if (!location.hash) return;
   location.hash.slice(1).split("&").forEach(kv=>{
     const [k,v] = kv.split("=");
-    if (PARAMS[k] && v!==undefined && !isNaN(+v)){
+    if (k === "vinter"){
+      state.vinter = +v ? 1 : 0;
+      const cb = document.getElementById("cb_vinter");
+      if (cb) cb.checked = !!state.vinter;
+    } else if (PARAMS[k] && v!==undefined && !isNaN(+v)){
       state[k] = Math.min(PARAMS[k].max, Math.max(PARAMS[k].min, +v));
       const el = document.getElementById("sl_"+k);
       if (el) el.value = state[k];
@@ -739,6 +809,7 @@ document.getElementById("sharebtn").addEventListener("click", async ()=>{
 });
 document.getElementById("resetbtn").addEventListener("click", ()=>{
   for (const k in PARAMS){ state[k]=PARAMS[k].def; document.getElementById("sl_"+k).value = state[k]; }
+  state.vinter = 0; document.getElementById("cb_vinter").checked = false;
   for (const id in ROADS){
     roadState[id] = {base: ROADS[id].base, cap: ROADS[id].cap};
     document.getElementById("base_"+id).value = roadState[id].base;
@@ -756,7 +827,7 @@ function update(){
   const res = compute();
   for (const id in ROADS){
     if (!roadLines[id]) break;
-    const v = res.seg[id], lv = vcLevel(v.vc);
+    const v = res.seg[id], lv = levelFor(id, v);
     const w = 3.5 + Math.min(9, v.extra/900);
     roadLines[id].setStyle({color: lv.hex, weight: w});
     roadLines[id].bindPopup(`<b>${ROADS[id].name}</b><br>
@@ -764,6 +835,10 @@ function update(){
       Makstime: ca. ${fmt(v.peakVehDir)} kjt/t i verste retning (${Math.round(v.vc*100)} % av kapasitet)<br>
       ${lv.sym} ${lv.t}${v.delay>=0.5 ? " · ca. +"+fmt1(v.delay)+" min i rush" : ""}`);
   }
+  riskMarkers.forEach(({marker, p})=>{
+    const t = res.seg[p.road] ? res.seg[p.road].tunge : 0;
+    marker.bindPopup(`<b>⚠️ ${p.name}</b><br>${p.desc}<br>Anslått ekstra tungtrafikk her: <b>+${fmt(t)}</b> tunge kjøretøy/døgn${state.vinter ? " – <b>vinterføre aktivert</b>" : ""}.`);
+  });
   renderSegments(res);
   renderChart(res);
   renderTravel(res);
