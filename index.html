@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>E134-stengingen: Belastningskalkulator for Frogn v2</title>
+<title>E134-stengingen: Belastningskalkulator for Frogn</title>
 <meta name="description" content="Uoffisiell borgersimulering: Hva skjer med lokalveiene i Frogn når E134 Vassum–Måna stenges under byggingen av ny Oslofjordtunnel? Juster forutsetningene selv.">
 <meta property="og:title" content="E134-stengingen: Belastningskalkulator for Frogn">
 <meta property="og:description" content="Hva skjer med rv. 152, Osloveien, Holtbråtveien og Heer når E134 Vassum–Måna stenges i to år? Juster forutsetningene selv og del scenarioet ditt.">
@@ -125,6 +125,17 @@ button:hover{filter:brightness(.96)}
 .datatable{width:100%; border-collapse:collapse; font-size:12px; margin-top:8px}
 .datatable th,.datatable td{border-bottom:1px solid var(--grid); padding:3px 6px; text-align:right; font-variant-numeric:tabular-nums}
 .datatable th:first-child,.datatable td:first-child{text-align:left}
+.cmp .j{margin:12px 0 14px}
+.cmp .jname{font-size:13px; font-weight:650; margin-bottom:5px}
+.cmp .brow{display:flex; align-items:center; gap:8px; margin:3px 0}
+.cmp .blabel{flex:0 0 148px; font-size:11px; color:var(--muted); text-align:right; line-height:1.25}
+.cmp .btrack{flex:1; display:flex; align-items:center; gap:7px; min-width:0}
+.cmp .bar{height:13px; border-radius:0 4px 4px 0; flex:none}
+.cmp .bval{font-size:11px; font-variant-numeric:tabular-nums; font-weight:650; white-space:nowrap}
+.cmp .cleg{display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--ink-2); margin:2px 0 4px}
+.cmp .cleg span{display:inline-flex; align-items:center; gap:5px}
+.cmp .cleg i{width:11px; height:11px; border-radius:3px; display:inline-block}
+.cmp .fnote{font-size:11px; color:var(--muted); margin-top:8px}
 .tt-table{width:100%; border-collapse:collapse; font-size:13px}
 .tt-table th,.tt-table td{border-bottom:1px solid var(--grid); padding:6px 6px; text-align:right; font-variant-numeric:tabular-nums}
 .tt-table th:first-child,.tt-table td:first-child{text-align:left}
@@ -172,6 +183,10 @@ footer.site{max-width:1400px; margin:0 auto; padding:0 22px 34px; color:var(--mu
           <label style="cursor:pointer"><span><input type="checkbox" id="cb_vinter" style="accent-color:var(--series);margin-right:6px">Vinterføre i bakkene</span></label>
           <div class="desc">Reduserer kapasiteten ca. 30 % på strekningene med Ottarsrudbakken, Skarphella og Rundvollbakkene, slik en dag med glatte bakker og fastkjørte vogntog gjør.</div>
         </div>
+        <div class="slider">
+          <label style="cursor:pointer"><span><input type="checkbox" id="cb_spreng" style="accent-color:var(--series);margin-right:6px">Sprengningsstenging av tunnelen (30 min)</span></label>
+          <div class="desc">Vegvesenet varsler inntil 6 stengninger på opptil 30 minutter per dag i opptil 3 år (utenom rush). Viser køen som bygger seg opp mot Måna og bakover forbi Biltema mot Ottarsrud.</div>
+        </div>
       </div>
       <div class="group">
         <div class="gtitle">Lokale forhold</div>
@@ -205,13 +220,18 @@ footer.site{max-width:1400px; margin:0 auto; padding:0 22px 34px; color:var(--mu
     </section>
 
     <section class="card">
-      <h2>Reisetider <span class="hint">– estimert, med omkjøring</span></h2>
-      <table class="tt-table" id="tttable"></table>
+      <h2>Reisetider: før og under stengingen <span class="hint">– estimert, felles skala</span></h2>
+      <div id="ttbars" class="cmp"></div>
     </section>
 
     <section class="card">
       <h2>Hva betyr det lokalt?</h2>
       <div class="statgrid" id="localstats"></div>
+    </section>
+
+    <section class="card">
+      <h2>🚒 Utrykning fra Korsegården brannstasjon <span class="hint">– estimert, felles skala</span></h2>
+      <div id="firebars" class="cmp"></div>
     </section>
 
     <section class="card">
@@ -252,7 +272,7 @@ const ROADS = {
   rv152_north: {
     name: "Rv. 152 Dyrløkke – Heer – Måna",
     short: "Rv. 152 Dyrløkke–Måna",
-    base: 10000, cap: 850, lenKm: 3.4, speed: 60,
+    base: 10000, cap: 750, lenKm: 3.4, speed: 60,
     coords: [[59.67412,10.65495],[59.6753,10.65771],[59.67853,10.66324],[59.68032,10.66514],[59.68225,10.66627],[59.68515,10.66887],[59.68616,10.66786],[59.68661,10.66429],[59.68772,10.66207],[59.68935,10.66011],[59.6908,10.65908],[59.6924,10.65883],[59.6944,10.66019],[59.69476,10.65997]]
   },
   osloveien_north: {
@@ -297,7 +317,8 @@ const POI = [
   {ll:[59.7019,10.7384], name:"Vassum (E6)", desc:"Her stenges E134 mot Måna"},
   {ll:[59.69476,10.65997], name:"Måna", desc:"Rundkjøring rett før Oslofjordtunnelen – tunnelen holdes åpen"},
   {ll:[59.67412,10.65495], name:"Dyrløkke / Drøbak City", desc:"Kjøpesenter, kollektivknutepunkt og kryss der rutene møtes"},
-  {ll:[59.6627,10.7461], name:"Korsegården (E6, Ås)", desc:"Avkjøring for trafikk sørfra"}
+  {ll:[59.6627,10.7461], name:"Korsegården (E6, Ås)", desc:"Avkjøring for trafikk sørfra"},
+  {ll:[59.65965,10.72588], name:"🚒 Korsegården brannstasjon", desc:"Follo brannvesen, kasernert døgnet rundt. Utrykning til Heer, Drøbak og Nordre Frogn går langs rv. 152 – samme vei som omkjøringstrafikken."}
 ];
 
 /* Kjente risikopunkter for tungtrafikk og vinterføre */
@@ -336,6 +357,7 @@ const state = {};                      // gjeldende sliderverdier
 const roadState = {};                  // overstyrbar base/cap per vei
 for (const k in PARAMS) state[k] = PARAMS[k].def;
 state.vinter = 0;
+state.spreng = 0;
 for (const id in ROADS) roadState[id] = {base: ROADS[id].base, cap: ROADS[id].cap};
 
 /* Timeprofil for et normalt hverdagsdøgn (normaliseres til 100 %) */
@@ -395,6 +417,16 @@ function compute(){
   res.busOffpeak = 2;                                          // lengre trasé, uten kø
   res.busRush = res.busOffpeak + res.seg.osloveien_north.delay + res.dyrlokkeDelay;
 
+  /* Kø ved 30 min sprengningsstenging av tunnelen (typisk time midt på dagen).
+     All tunneltrafikk står da ved Måna; køen vokser bakover langs rv. 152 og
+     Holtbråtveien. Enkel kø-teori: ankomstrate a, utløsning s etter åpning. */
+  const tunnelDayVol = remaining;                       // tunneltrafikk som fortsatt kjører
+  const aDir = tunnelDayVol * 0.045 / 2;                // kjt/t per retning midt på dagen
+  res.sprengQueue = Math.round(aDir / 2);               // biler i kø per retning etter 30 min
+  res.sprengKm = res.sprengQueue * 7 / 1000;            // kølengde per retning (7 m per bil)
+  const sCap = roadState.rv152_north.cap;
+  res.sprengClearMin = aDir < sCap ? Math.round(60 * res.sprengQueue / (sCap - aDir)) : 99;
+
   return res;
 }
 
@@ -408,7 +440,12 @@ function boliggateLevel(total){
   return               {c:"var(--critical)", hex:"#d03b3b", t:"Kritisk for myke trafikanter", sym:"🔴"};
 }
 function levelFor(id, v){
-  return ROADS[id].kind === "boliggate" ? boliggateLevel(v.total) : vcLevel(v.vc);
+  let lv = ROADS[id].kind === "boliggate" ? boliggateLevel(v.total) : vcLevel(v.vc);
+  if (state.spreng && (id === "rv152_north" || id === "holtbrat")){
+    if (v.vc < 0.9)      lv = {c:"var(--serious)",  hex:"#ec835a", t:"Køutsatt ved tunnelstenging", sym:"🟠"};
+    else                 lv = {c:"var(--critical)", hex:"#d03b3b", t:"Kø i rush + sprengningskø",   sym:"🔴"};
+  }
+  return lv;
 }
 function vcLevel(vc){
   if (vc < 0.7)  return {c:"var(--good)",     hex:"#0ca30c", t:"God flyt",      sym:"🟢"};
@@ -506,6 +543,37 @@ let map = null;
   legend.addTo(map);
 })();
 
+/* Del av en rute, målt i km fra sluttpunktet (Måna-enden) og bakover */
+function tailOfRoute(coords, km){
+  const R = 111320, cosLat = Math.cos(59.68 * Math.PI / 180);
+  const out = [coords[coords.length - 1]];
+  let left = km * 1000;
+  for (let i = coords.length - 1; i > 0 && left > 0; i--){
+    const a = coords[i], b = coords[i-1];
+    const d = Math.hypot((a[0]-b[0]) * R, (a[1]-b[1]) * R * cosLat);
+    if (d <= left){ out.push(b); left -= d; }
+    else {
+      const f = left / d;
+      out.push([a[0] + (b[0]-a[0]) * f, a[1] + (b[1]-a[1]) * f]);
+      left = 0;
+    }
+  }
+  return out;
+}
+let queueLine = null;
+function drawQueue(res){
+  if (!map) return;
+  if (queueLine){ map.removeLayer(queueLine); queueLine = null; }
+  if (!state.spreng) return;
+  const pts = tailOfRoute(ROADS.rv152_north.coords, Math.max(0.15, res.sprengKm));
+  queueLine = L.polyline(pts, {color:"#d03b3b", weight:12, opacity:.45, lineCap:"butt"})
+    .addTo(map)
+    .bindPopup(`<b>🧨 Sprengningskø ved Måna</b><br>
+      Ca. <b>${fmt(res.sprengQueue)}</b> biler i kø per retning – rundt <b>${fmt1(res.sprengKm)} km</b> bakover forbi Biltema.<br>
+      Ca. ${res.sprengClearMin >= 99 ? "over 60" : fmt(res.sprengClearMin)} min etter åpning før køen er avviklet.
+      Sideveiene langs strekket er i praksis sperret mens køen står.`);
+}
+
 /* ---------- Brytere ------------------------------------------------------- */
 function sliderHTML(key){
   const p = PARAMS[key];
@@ -526,6 +594,9 @@ for (const key in PARAMS){
 }
 document.getElementById("cb_vinter").addEventListener("change", e=>{
   state.vinter = e.target.checked ? 1 : 0; update();
+});
+document.getElementById("cb_spreng").addEventListener("change", e=>{
+  state.spreng = e.target.checked ? 1 : 0; update();
 });
 
 /* Avansert-tabell */
@@ -659,36 +730,123 @@ document.getElementById("tabletoggle").addEventListener("click", e=>{
   renderTable();
 });
 
-/* ---------- Reisetider ---------------------------------------------------- */
-function travelRows(res){
-  const s = res.seg;
-  const rows = [
-    {name:"Dyrløkke → E6 (mot Oslo), via Osloveien",
-     t0: s.rv152_north.t0 + s.osloveien_north.t0 + 1,
-     delay: s.osloveien_north.delay + res.dyrlokkeDelay,
-     note:"I dag: ca. 8 min via E134"},
-    {name:"Dyrløkke → E6 Korsegården (mot Ås/Moss), via rv. 152",
-     t0: s.rv152_east.t0 + 1,
-     delay: s.rv152_east.delay + res.dyrlokkeDelay,
-     note:""},
-    {name:"Drøbak sentrum → Dyrløkke (Osloveien)",
-     t0: s.osloveien_drobak.t0,
-     delay: s.osloveien_drobak.delay + res.dyrlokkeDelay,
-     note:"Forsinkelsen skyldes i hovedsak køen ved Dyrløkke"},
-    {name:"Måna → E6 (tunneltrafikk vestfra), via Osloveien",
-     t0: s.osloveien_north.t0 + 1,
-     delay: s.osloveien_north.delay,
-     note:"I dag: ca. 5 min via E134"}
-  ];
-  return rows;
+/* ---------- Reisetider: før/under/verst – sammenlikning ------------------- */
+/* Ventetid for fotgjenger som skal krysse i gangfelt uten lys: enkel
+   gap-teori med Poisson-ankomster. tc = tidsluke man trenger (ca. 7 s). */
+function crossWaitSec(vehPerHour){
+  const lam = Math.max(vehPerHour, 30) / 3600, tc = 7;
+  return (Math.exp(lam * tc) - lam * tc - 1) / lam;
 }
 function renderTravel(res){
-  const rows = travelRows(res);
-  document.getElementById("tttable").innerHTML =
-    `<tr><th>Strekning</th><th>Utenom rush</th><th>I rush</th></tr>` +
-    rows.map(r=>`<tr><td>${r.name}${r.note?`<br><small style="color:var(--muted)">${r.note}</small>`:""}</td>
-      <td>ca. ${fmt1(r.t0)} min</td>
-      <td><b>ca. ${fmt1(r.t0 + r.delay)} min</b>${r.delay>=0.5?` <span class="up">(+${fmt1(r.delay)})</span>`:""}</td></tr>`).join("");
+  const seg = res.seg, dyr = res.dyrlokkeDelay;
+  const corridorExtra = Math.min(30, (res.sprengClearMin >= 99 ? 60 : res.sprengClearMin) / 2);
+  const tunnelExtra = 15 + corridorExtra;    // gj.sn. venting ved 30 min stenging + kø etterpå
+
+  const rows = [
+    {name:"Dyrløkke → E6 mot Oslo (via Osloveien og Vinterbro)",
+     idag: 8,
+     rush: seg.rv152_north.t0 * 0.5 + seg.osloveien_north.t0 + 1 + seg.osloveien_north.delay + dyr,
+     spreng: "korridor"},
+    {name:"Dyrløkke → E6 Korsegården (mot Ås/Moss)",
+     idag: seg.rv152_east.t0 + 1,
+     rush: seg.rv152_east.t0 + 1 + seg.rv152_east.delay + dyr,
+     spreng: "ingen"},
+    {name:"Gjennom tunnelen fra Dyrløkke (mot Hurum-siden)",
+     idag: seg.rv152_north.t0 + 10,
+     rush: seg.rv152_north.t0 + 10 + seg.rv152_north.delay + dyr,
+     spreng: "tunnel"},
+    {name:"Drøbak sentrum → Dyrløkke (Osloveien)",
+     idag: seg.osloveien_drobak.t0,
+     rush: seg.osloveien_drobak.t0 + seg.osloveien_drobak.delay + dyr,
+     spreng: "ingen"}
+  ];
+  rows.forEach(r=>{
+    r.verst = r.rush + (r.spreng === "tunnel" ? tunnelExtra : r.spreng === "korridor" ? corridorExtra : 0);
+  });
+  const maxV = Math.max(...rows.map(r=>r.verst)) * 1.05;
+
+  const bar = (val, color, label) => {
+    const w = Math.max(2, val / maxV * 76);
+    return `<div class="brow"><div class="blabel">${label}</div>
+      <div class="btrack"><div class="bar" style="width:${w}%;background:${color}"></div>
+      <span class="bval">${fmt1(val)} min</span></div></div>`;
+  };
+
+  /* Gangfelt-kryssing ved Heer i rush (rv. 152, begge retninger) */
+  const rushFrac = state.rush / 100;
+  const wBefore = crossWaitSec(roadState.rv152_north.base * rushFrac);
+  const wAfter  = crossWaitSec(seg.rv152_north.total * rushFrac);
+  const maxW = Math.max(wAfter, wBefore) * 1.05;
+  const wbar = (val, color, label) => {
+    const w = Math.max(2, val / maxW * 76);
+    return `<div class="brow"><div class="blabel">${label}</div>
+      <div class="btrack"><div class="bar" style="width:${w}%;background:${color}"></div>
+      <span class="bval">ca. ${fmt(val)} sek</span></div></div>`;
+  };
+
+  document.getElementById("ttbars").innerHTML =
+    `<div class="cleg">
+       <span><i style="background:var(--axisline)"></i>I dag (E134 åpen)</span>
+       <span><i style="background:var(--series)"></i>Under stengingen, i rush</span>
+       <span><i style="background:var(--serious)"></i>… rett etter en sprengningsstenging</span>
+     </div>` +
+    rows.map(r=>`<div class="j"><div class="jname">${r.name}</div>
+      ${bar(r.idag, "var(--axisline)", "I dag")}
+      ${bar(r.rush, "var(--series)", "Under stenging, rush")}
+      ${r.verst > r.rush + 0.05 ? bar(r.verst, "var(--serious)", "Etter sprengningsstenging") : ""}
+    </div>`).join("") +
+    `<div class="j"><div class="jname">🚸 Å krysse rv. 152 i gangfelt ved Heer, i rush</div>
+      ${wbar(wBefore, "var(--axisline)", "I dag")}
+      ${wbar(wAfter, "var(--series)", "Under stengingen")}
+      <div class="fnote">Ventetid på en luke i trafikken stor nok til å krysse (uten lysregulering). Det er mange gangfelt langs strekningen – hver av dem gir også stopp og forsinkelse for bilene, noe som er bakt inn i den lavere kapasiteten på strekket.</div>
+    </div>
+    <div class="fnote">«Etter sprengningsstenging» = gjennomsnittlig tillegg i den verste perioden etter en 30-minutters stenging av tunnelen (venting + kø som avvikles). Alle søyler deler samme skala.</div>`;
+}
+
+/* ---------- Utrykning fra Korsegården brannstasjon ------------------------ */
+/* Antakelser: kasernert stasjon (ca. 1 min utrykningstid), ca. 90 km/t med
+   blålys på fri landevei, ca. 12 km/t forbi stående kø på tofeltsvei, og at
+   kø/kryssfriksjon i rush koster utrykningen halvparten av bilistenes
+   forsinkelse (noe slipper forbi, mye gjør ikke). */
+function renderFire(res){
+  const seg = res.seg, dyr = res.dyrlokkeDelay;
+  const turnout = 1, vFree = 90;
+  const crawlExtra = res.sprengKm * (60/12 - 60/vFree);
+
+  const heer = {
+    name: "Til Heer (ca. 7 km via rv. 152 og Dyrløkke)",
+    bars: [
+      {v: 7.2/vFree*60 + turnout, c:"var(--axisline)", l:"I dag"},
+      {v: 7.2/vFree*60 + turnout + 0.5*(seg.rv152_east.delay + dyr), c:"var(--series)", l:"Under stenging, rush"}
+    ]
+  };
+  const nfIdag = 17/vFree*60 + turnout;
+  const nfRush = nfIdag + 0.5*(seg.rv152_east.delay + dyr + seg.rv152_north.delay + seg.holtbrat.delay);
+  const nf = {
+    name: "Til Nordre Frogn/Dal (ca. 17 km, over Ottarsrudbakken og Skarphella)",
+    bars: [
+      {v: nfIdag, c:"var(--axisline)", l:"I dag"},
+      {v: nfRush, c:"var(--series)", l:"Under stenging, rush"},
+      {v: nfRush + crawlExtra, c:"var(--serious)", l:"… med sprengningskø ved Måna"},
+      {v: 24/vFree*60 + turnout + 0.5*seg.fv156.delay, c:"var(--critical)", l:"Ottarsrudbakken sperret → om E6/Nesset"}
+    ]
+  };
+  const maxV = Math.max(...heer.bars.map(b=>b.v), ...nf.bars.map(b=>b.v)) * 1.05;
+  const bar = b => {
+    const w = Math.max(2, b.v / maxV * 74);
+    return `<div class="brow"><div class="blabel">${b.l}</div>
+      <div class="btrack"><div class="bar" style="width:${w}%;background:${b.c}"></div>
+      <span class="bval">${fmt1(b.v)} min</span></div></div>`;
+  };
+  document.getElementById("firebars").innerHTML =
+    [heer, nf].map(d=>`<div class="j"><div class="jname">${d.name}</div>${d.bars.map(bar).join("")}</div>`).join("") +
+    `<div class="fnote">Utrykningsveien er den samme veien som all omkjøringstrafikken flyttes til: en tofeltsvei
+    uten forbikjøringsmulighet når det står kø i begge retninger. Står et vogntog fast i Ottarsrudbakken
+    (vinterføre), finnes det ingen vei til Nordre Frogn som ikke går over andre vinterutsatte bakker
+    (Rundvollbakkene på fv. 156) – da er omkjøringen om E6 og Nesset eneste alternativ, og selv den er sårbar.
+    Til sammenlikning krever dimensjoneringsforskriften innsatstid på maks 10 min til objekter med særlig fare
+    (sykehjem o.l.), 20 min i tettsteder og 30 min ellers.
+    Korsegården stasjon er kasernert (4 mannskaper døgnet rundt) og ligger selv på rv. 152.</div>`;
 }
 
 /* ---------- Lokale konsekvenser ------------------------------------------- */
@@ -727,6 +885,14 @@ function renderLocal(res){
       E134 er dimensjonert for tungtransport – lokal- og fylkesveiene har svakere standard, og Skarphella er i dårlig forfatning allerede.
       Faktisk bruksklasse/tillatt akseltrykk per vei kan slås opp i NVDB Vegkart.</div>
     </div>
+    <div class="stat ${state.spreng ? "warnbox" : ""}">
+      <div class="t">🧨 Sprengningsstenging av tunnelen (30 min)</div>
+      <div class="v">ca. ${fmt(res.sprengQueue)} <small>biler i kø per retning</small></div>
+      <div class="d">Opptil ca. ${fmt1(res.sprengKm)} km kø fra Måna bakover forbi Biltema mot Ottarsrud,
+      og ca. ${res.sprengClearMin >= 99 ? "over 60" : fmt(res.sprengClearMin)} min etter åpning før køen er borte – inntil 6 ganger daglig i opptil 3 år.
+      Mens køen står, er det svært vanskelig å komme inn fra sideveiene (Ottarsrudgrenda, Heerveien, Skanseveien, Osloveien-krysset)
+      – og krevende for gående å krysse veien.</div>
+    </div>
     <div class="stat ${state.vinter ? "warnbox" : ""}">
       <div class="t">🚑 Beredskap Nordre Frogn og Nesodden</div>
       <div class="v">${state.vinter ? "Uholdbar på vinterføre" : "Sårbar"}</div>
@@ -754,6 +920,9 @@ document.getElementById("methodbody").innerHTML = `
     <li>Grunntrafikk og kapasitet per vei er anslag og kan endres under «Avansert». Reelle ÅDT-tall finnes i Statens vegvesens trafikkdata-kart.</li>
     <li>Timeprofilen er et typisk pendlerdøgn med topper kl. 07–09 og 15–17.</li>
     <li>Boliggater/skoleveier (som Smieveien-ruten over Heer) farges etter <em>total trafikkmengde</em>, ikke etter bilflyt: under 500 kjt/døgn regnes som akseptabelt, 500–1&nbsp;000 belastende, 1&nbsp;000–2&nbsp;000 uholdbart som skolevei, og over 2&nbsp;000 kritisk. Dette er planfaglige tommelfingerregler for gater uten fortau/gangfelt – god flyt for bilene kan samtidig være uholdbart for gående.</li>
+    <li>Kapasiteten på rv. 152 Dyrløkke–Måna er satt lavere enn på de andre hovedstrekningene (750 mot 850 kjt/t/retning) fordi strekket har mange kryss og avkjørsler med stor friksjon – Heerveien, Skanseveien, Osloveien-krysset og Ottarsrudgrenda – samt kryssende fotgjengere ved Heer.</li>
+    <li>«Sprengningsstenging av tunnelen» viser køoppbygging ved en 30-minutters stenging midt på dagen (Vegvesenet varsler inntil 6 slike per dag i opptil 3 år, utenom rush): all tunneltrafikk stanser ved Måna, køen vokser bakover langs rv. 152/Holtbråtveien, og lengde og avviklingstid beregnes med enkel kø-teori ut fra trafikkmengden og kapasiteten du har valgt.</li>
+    <li>Utrykningsanalysen antar kasernert stasjon (ca. 1 min utrykningstid), ca. 90 km/t med blålys på fri vei, ca. 12 km/t forbi stående kø, og at kø i rush koster utrykningen halvparten av bilistenes forsinkelse. Avstander: Korsegården stasjon–Heer ca. 7 km, –Nordre Frogn/Dal ca. 17 km via Ottarsrudbakken og Skarphella, ca. 24 km via omkjøringen E6–Nesset–fv. 156.</li>
     <li>Tungtrafikk anslås som en justerbar andel av omkjøringstrafikken og vises for risikopunktene Ottarsrudbakken (bratt bakke, ca. 110° sving), Skarphella (dårlig forfatning) og Rundvollbakkene. «Vinterføre i bakkene» reduserer kapasiteten ca. 30&nbsp;% på disse strekningene. Faktisk bruksklasse og tillatt akseltrykk per vei finnes i <a href="https://vegkart.atlas.vegvesen.no/" target="_blank" rel="noopener">NVDB Vegkart</a>.</li>
   </ul>
   <h3>Viktige forbehold</h3>
@@ -763,12 +932,15 @@ document.getElementById("methodbody").innerHTML = `
     <li><a href="https://www.vegvesen.no/vegprosjekter/prosjekt/oslofjordforbindelsen/" target="_blank" rel="noopener">Statens vegvesen: E134 Oslofjordforbindelsen – byggetrinn 2</a></li>
     <li><a href="https://www.vegvesen.no/vegprosjekter/prosjekt/oslofjordforbindelsen/nyhetsarkiv/informasjonsmoter-for-e134-oslofjordforbindelsen--byggetrinn-2/" target="_blank" rel="noopener">Presentasjon fra informasjonsmøtet i Frogn, 26. august 2026</a></li>
     <li><a href="https://www.vegvesen.no/trafikkdata/" target="_blank" rel="noopener">Statens vegvesen: Trafikkdata (reelle ÅDT-tall)</a></li>
+    <li><a href="https://www.follobrannvesen.no/korsegaarden-brannstasjon.5932311-397084.html" target="_blank" rel="noopener">Follo brannvesen: Korsegården brannstasjon (Drøbakveien 191, kasernert)</a></li>
+    <li><a href="https://lovdata.no/dokument/SF/forskrift/2021-09-15-2755" target="_blank" rel="noopener">Brann- og redningsvesenforskriften (krav til innsatstid: 10/20/30 min)</a></li>
   </ul>`;
 
 /* ---------- Del scenario / nullstill --------------------------------------- */
 function currentHash(){
   const parts = Object.keys(PARAMS).map(k=>k+"="+state[k]);
   parts.push("vinter="+state.vinter);
+  parts.push("spreng="+state.spreng);
   return "#" + parts.join("&");
 }
 function writeHash(){
@@ -782,6 +954,10 @@ function readHash(){
       state.vinter = +v ? 1 : 0;
       const cb = document.getElementById("cb_vinter");
       if (cb) cb.checked = !!state.vinter;
+    } else if (k === "spreng"){
+      state.spreng = +v ? 1 : 0;
+      const cb = document.getElementById("cb_spreng");
+      if (cb) cb.checked = !!state.spreng;
     } else if (PARAMS[k] && v!==undefined && !isNaN(+v)){
       state[k] = Math.min(PARAMS[k].max, Math.max(PARAMS[k].min, +v));
       const el = document.getElementById("sl_"+k);
@@ -810,6 +986,7 @@ document.getElementById("sharebtn").addEventListener("click", async ()=>{
 document.getElementById("resetbtn").addEventListener("click", ()=>{
   for (const k in PARAMS){ state[k]=PARAMS[k].def; document.getElementById("sl_"+k).value = state[k]; }
   state.vinter = 0; document.getElementById("cb_vinter").checked = false;
+  state.spreng = 0; document.getElementById("cb_spreng").checked = false;
   for (const id in ROADS){
     roadState[id] = {base: ROADS[id].base, cap: ROADS[id].cap};
     document.getElementById("base_"+id).value = roadState[id].base;
@@ -835,6 +1012,7 @@ function update(){
       Makstime: ca. ${fmt(v.peakVehDir)} kjt/t i verste retning (${Math.round(v.vc*100)} % av kapasitet)<br>
       ${lv.sym} ${lv.t}${v.delay>=0.5 ? " · ca. +"+fmt1(v.delay)+" min i rush" : ""}`);
   }
+  drawQueue(res);
   riskMarkers.forEach(({marker, p})=>{
     const t = res.seg[p.road] ? res.seg[p.road].tunge : 0;
     marker.bindPopup(`<b>⚠️ ${p.name}</b><br>${p.desc}<br>Anslått ekstra tungtrafikk her: <b>+${fmt(t)}</b> tunge kjøretøy/døgn${state.vinter ? " – <b>vinterføre aktivert</b>" : ""}.`);
@@ -842,6 +1020,7 @@ function update(){
   renderSegments(res);
   renderChart(res);
   renderTravel(res);
+  renderFire(res);
   renderLocal(res);
   writeHash();
 }
