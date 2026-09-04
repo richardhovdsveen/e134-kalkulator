@@ -79,6 +79,9 @@ header.site .sub{color:var(--ink-2); max-width:70ch; margin:0}
 .slider .val{font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap}
 .slider .desc{color:var(--muted); font-size:12px; margin-top:1px}
 input[type=range]{width:100%; accent-color:var(--series); margin:4px 0 0}
+.segctl{display:flex; gap:0; border:1px solid var(--border); border-radius:8px; overflow:hidden; width:fit-content}
+.segctl button{border:0; border-radius:0; padding:6px 11px; font-size:12px; background:var(--surface-2); color:var(--ink-2)}
+.segctl button.on{background:var(--series); color:#fff}
 .btnrow{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px}
 button{
   font:inherit; font-weight:600; padding:7px 12px; border-radius:8px; cursor:pointer;
@@ -171,6 +174,13 @@ footer.site{max-width:1400px; margin:0 auto; padding:0 22px 34px; color:var(--mu
       <h2>Forutsetninger <span class="hint">– juster selv</span></h2>
       <div class="group">
         <div class="gtitle">Trafikkgrunnlag</div>
+        <div class="slider">
+          <label>Tidspunkt</label>
+          <div class="segctl" id="tmctl" role="radiogroup" aria-label="Tidspunkt på døgnet">
+            <button type="button" data-tm="am" class="on">Morgenrush</button><button type="button" data-tm="pm">Ettermiddagsrush</button><button type="button" data-tm="off">Utenom rush</button>
+          </div>
+          <div class="desc">Velger hvilken periode kartfarger og forsinkelser gjelder. Morgen: mest trafikk mot E6. Ettermiddag: mest mot Drøbak. Utenom rush: jevnere trafikk i begge retninger.</div>
+        </div>
         <div id="sliders-base"></div>
       </div>
       <div class="group">
@@ -185,8 +195,8 @@ footer.site{max-width:1400px; margin:0 auto; padding:0 22px 34px; color:var(--mu
           <div class="desc">Reduserer kapasiteten ca. 30 % på strekningene med Ottarsrudbakken, Skarphella og Rundvollbakkene, og flytter 25 % av bakke-trafikken over på Osloveien – slik en dag med glatte bakker faktisk gjør. Osloveien får altså mer trafikk i vintermodus.</div>
         </div>
         <div class="slider">
-          <label style="cursor:pointer"><span><input type="checkbox" id="cb_spreng" style="accent-color:var(--series);margin-right:6px">Sprengningsstenging av tunnelen (30 min)</span></label>
-          <div class="desc">Vegvesenet varsler inntil 6 stengninger på opptil 30 minutter per dag i opptil 3 år (utenom rush). Viser køen som bygger seg opp mot Måna og bakover forbi Biltema mot Ottarsrud.</div>
+          <label style="cursor:pointer"><span><input type="checkbox" id="cb_spreng" style="accent-color:var(--series);margin-right:6px">Sprengningsstenging av tunnelen (30 min, aldri i rush)</span></label>
+          <div class="desc">Vegvesenet varsler inntil 6 stengninger på opptil 30 minutter per dag i opptil 3 år – men aldri i rushtiden. Køen beregnes derfor for en time midt på dagen, og kommer i tillegg til rushkøene, ikke oppå dem. Vises som rød stripe fra Måna bakover forbi Biltema.</div>
         </div>
       </div>
       <div class="group">
@@ -329,7 +339,9 @@ const RISKPOINTS = [
   {ll:[59.7174,10.6632], name:"Skarphella", road:"holtbrat",
    desc:"Bakke i dårlig forfatning som tåler dagens belastning dårlig. Et vogntog som står fast her vinterstid sperrer veien."},
   {ll:[59.71472,10.70808], name:"Rundvollbakkene", road:"fv156",
-   desc:"Bratte bakker der biler og vogntog står fast på vinterføre."}
+   desc:"Bratte bakker der biler og vogntog står fast på vinterføre."},
+  {ll:[59.68830,10.68150], name:"Osloveien: syklister i kjørebanen", road:"osloveien_north", icon:"🚴", bike:true,
+   desc:"Bakker bru–Mosseveien mangler eget gang- og sykkelfelt. Pendlersyklister mot Oslo deler kjørebanen med omkjøringstrafikken – farlig for syklistene, og forsinkende for bilene."}
 ];
 /* Strekninger med bakker som rammes av vinterføre (redusert kapasitet i vintermodus) */
 const WINTER_ROADS = {rv152_north:1, holtbrat:1, fv156:1};
@@ -350,6 +362,8 @@ const PARAMS = {
              desc:"Typisk 8–10 % på pendlerveier. Høyere tall gir mer kø i rush."},
   tung:     {group:"tung", label:"Andel tunge kjøretøy (lastebil/vogntog)", unit:" %", min:5, max:25, step:1, def:12,
              desc:"Tungtrafikkandelen på E134 i dag. Brukes til å anslå vogntog per døgn over Ottarsrudbakken, Skarphella og Rundvollbakkene."},
+  sykkel:   {group:"local", label:"Syklister Drøbak–Oslo via Osloveien", unit:" per døgn", min:0, max:500, step:10, def:100,
+             desc:"Antallet i dag er ukjent – juster gjerne. Pendlersyklister deler kjørebanen med bilene der strekningen Bakker bru–Mosseveien mangler eget gang- og sykkelfelt."},
   smie:     {group:"local", label:"Snikkjøring: andel av rv. 152-trafikken som tar Smieveien", unit:" %", min:0, max:15, step:1, def:3,
              desc:"Snarveien fra rundkjøringen på Dyrløkke gjennom Smieveien, over Heer og via Heerveien ut på rv. 152 ved Bakker – boliggater uten gangfelt. Selv få prosent gir mange biler."}
 };
@@ -359,6 +373,7 @@ const roadState = {};                  // overstyrbar base/cap per vei
 for (const k in PARAMS) state[k] = PARAMS[k].def;
 state.vinter = 0;
 state.spreng = 0;
+state.tm = "am";
 for (const id in ROADS) roadState[id] = {base: ROADS[id].base, cap: ROADS[id].cap};
 
 /* Timeprofil for et normalt hverdagsdøgn (normaliseres til 100 %) */
@@ -401,13 +416,22 @@ function compute(){
   extra.smieveien = (s.smie/100) * (roadState.rv152_north.base + extra.rv152_north);
 
   const res = {remaining, south, north, seg:{}};
-  const peakFrac = s.rush/100;
+  /* Valgt periode: rushandel og retningsskjevhet. Utenom rush brukes en
+     typisk time midt på dagen (ca. 4,5 % av døgnet) med jevn retning. */
+  const peakFrac = state.tm === "off" ? 0.045 : s.rush/100;
+  const dirShare = state.tm === "off" ? 0.5 : PEAKSHARE_DIR;
+  res.peakFrac = peakFrac; res.dirShare = dirShare;
+  /* Syklister i kjørebanen på Osloveien: 20 % av døgnets turer i makstimen
+     (6 % utenom rush), i pendlerretningen. Én syklist ≈ 3 personbil-
+     ekvivalenter på strekning uten forbikjøringsmulighet. */
+  const bikesPeak = (state.tm === "off" ? 0.06 : 0.20) * s.sykkel;
 
   for (const id in ROADS){
     const r = ROADS[id];
     const ex = extra[id] || 0;
     const total = roadState[id].base + ex;
-    const peakVehDir = total * peakFrac * PEAKSHARE_DIR;      // kjt/t i makstimen, verste retning
+    let peakVehDir = total * peakFrac * dirShare;             // kjt/t i makstimen, verste retning
+    if (id === "osloveien_north") peakVehDir += bikesPeak * 3; // syklister som personbilekvivalenter
     const cap = roadState[id].cap * (state.vinter && WINTER_ROADS[id] ? 0.7 : 1);
     const vc = peakVehDir / cap;
     const t0 = r.lenKm / r.speed * 60;
@@ -426,6 +450,22 @@ function compute(){
      følge Osloveien til Vinterbro og E6 derfra. */
   res.busOffpeak = 2;                                          // lengre trasé, uten kø
   res.busRush = res.busOffpeak + res.seg.osloveien_north.delay + res.dyrlokkeDelay;
+
+  /* Syklistenes sikkerhet på Osloveien (Bakker bru–Mosseveien, ca. 4 km,
+     ca. 20 km/t): forbikjøringer per tur = bilstrøm i samme retning × tid på
+     strekningen. Farlig andel = sannsynlighet for møtende bil i et
+     forbikjøringsvindu på ca. 10 sekunder. */
+  const oslT = res.seg.osloveien_north;
+  const bikeTime = 4 / 20;                                    // timer på strekningen
+  const qSameNow   = roadState.osloveien_north.base * peakFrac * dirShare;
+  const qSameUnder = oslT.total * peakFrac * dirShare;
+  const qOppUnder  = oslT.total * peakFrac * (1 - dirShare);
+  res.bike = {
+    overtNow:   qSameNow * bikeTime,
+    overtUnder: qSameUnder * bikeTime,
+    dangerous:  qSameUnder * bikeTime * (1 - Math.exp(-qOppUnder * 10 / 3600)),
+    perHour: bikesPeak
+  };
 
   /* Kø ved 30 min sprengningsstenging av tunnelen (typisk time midt på dagen).
      All tunneltrafikk står da ved Måna; køen vokser bakover langs rv. 152 og
@@ -450,12 +490,7 @@ function boliggateLevel(total){
   return               {c:"var(--critical)", hex:"#d03b3b", t:"Kritisk for myke trafikanter", sym:"🔴"};
 }
 function levelFor(id, v){
-  let lv = ROADS[id].kind === "boliggate" ? boliggateLevel(v.total) : vcLevel(v.vc);
-  if (state.spreng && (id === "rv152_north" || id === "holtbrat")){
-    if (v.vc < 0.9)      lv = {c:"var(--serious)",  hex:"#ec835a", t:"Køutsatt ved tunnelstenging", sym:"🟠"};
-    else                 lv = {c:"var(--critical)", hex:"#d03b3b", t:"Kø i rush + sprengningskø",   sym:"🔴"};
-  }
-  return lv;
+  return ROADS[id].kind === "boliggate" ? boliggateLevel(v.total) : vcLevel(v.vc);
 }
 function vcLevel(vc){
   if (vc < 0.7)  return {c:"var(--good)",     hex:"#0ca30c", t:"God flyt",      sym:"🟢"};
@@ -532,7 +567,7 @@ let map = null;
      .addTo(map).bindPopup(`<b>${p.name}</b><br>${p.desc}`);
   });
   RISKPOINTS.forEach(p=>{
-    const icon = L.divIcon({className:"", html:'<div style="font-size:19px;line-height:19px">⚠️</div>', iconSize:[19,19], iconAnchor:[10,10]});
+    const icon = L.divIcon({className:"", html:'<div style="font-size:19px;line-height:19px">'+(p.icon||"⚠️")+'</div>', iconSize:[19,19], iconAnchor:[10,10]});
     riskMarkers.push({marker: L.marker(p.ll, {icon}).addTo(map), p});
   });
 
@@ -608,6 +643,16 @@ document.getElementById("cb_vinter").addEventListener("change", e=>{
 document.getElementById("cb_spreng").addEventListener("change", e=>{
   state.spreng = e.target.checked ? 1 : 0; update();
 });
+document.querySelectorAll("#tmctl button").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    state.tm = b.dataset.tm;
+    document.querySelectorAll("#tmctl button").forEach(x=>x.classList.toggle("on", x === b));
+    update();
+  });
+});
+function periodShort(){
+  return state.tm === "am" ? "i morgenrushet" : state.tm === "pm" ? "i ettermiddagsrushet" : "utenom rush";
+}
 
 /* Avansert-tabell */
 const advtable = document.getElementById("advtable");
@@ -632,7 +677,7 @@ function renderSegments(res){
       <div class="nums">
         <div class="num"><b class="delta ${v.extra>0?"up":""}">${v.extra>0?"+":""}${fmt(v.extra)}</b><span>ekstra kjt/døgn</span></div>
         <div class="num"><b>${fmt(v.total)}</b><span>totalt kjt/døgn</span></div>
-        <div class="num"><b>${v.delay>=0.5?"+"+fmt1(v.delay)+" min":"–"}</b><span>forsinkelse i rush</span></div>
+        <div class="num"><b>${v.delay>=0.5?"+"+fmt1(v.delay)+" min":"–"}</b><span>forsinkelse ${periodShort()}</span></div>
         ${v.overflow > 10 ? `<div class="num"><b class="up">+${fmt(v.overflow)}/t</b><span>kø som hoper seg opp</span></div>` : ""}
       </div>
       <span class="chip" style="color:${lv.hex}"><span class="dot" style="background:${lv.hex}"></span>${lv.t}${r.kind==="boliggate" ? "" : " · "+Math.round(v.vc*100)+" % av kapasitet"}</span>
@@ -753,28 +798,28 @@ function renderTravel(res){
   const corridorExtra = Math.min(30, (res.sprengClearMin >= 99 ? 60 : res.sprengClearMin) / 2);
   const tunnelExtra = 15 + corridorExtra;    // gj.sn. venting ved 30 min stenging + kø etterpå
 
+  /* idag = før stengingen. t0d = omkjøringsrute i fri flyt. Sprengning skjer
+     aldri i rush, så sprengningssøylen regnes fra fri flyt midt på dagen. */
   const rows = [
     {name:"Dyrløkke → E6 mot Oslo (via Osloveien og Vinterbro)",
-     idag: 8,
-     rush: seg.rv152_north.t0 * 0.5 + seg.osloveien_north.t0 + 1 + seg.osloveien_north.delay + dyr,
-     spreng: "korridor"},
+     idag: 8, t0d: seg.rv152_north.t0 * 0.5 + seg.osloveien_north.t0 + 1,
+     delay: seg.osloveien_north.delay + dyr, spreng: "korridor"},
     {name:"Dyrløkke → E6 Korsegården (mot Ås/Moss)",
-     idag: seg.rv152_east.t0 + 1,
-     rush: seg.rv152_east.t0 + 1 + seg.rv152_east.delay + dyr,
-     spreng: "ingen"},
+     idag: seg.rv152_east.t0 + 1, t0d: seg.rv152_east.t0 + 1,
+     delay: seg.rv152_east.delay + dyr, spreng: "ingen"},
     {name:"Gjennom tunnelen fra Dyrløkke (mot Hurum-siden)",
-     idag: seg.rv152_north.t0 + 10,
-     rush: seg.rv152_north.t0 + 10 + seg.rv152_north.delay + dyr,
-     spreng: "tunnel"},
+     idag: seg.rv152_north.t0 + 10, t0d: seg.rv152_north.t0 + 10,
+     delay: seg.rv152_north.delay + dyr, spreng: "tunnel"},
     {name:"Drøbak sentrum → Dyrløkke (Osloveien)",
-     idag: seg.osloveien_drobak.t0,
-     rush: seg.osloveien_drobak.t0 + seg.osloveien_drobak.delay + dyr,
-     spreng: "ingen"}
+     idag: seg.osloveien_drobak.t0, t0d: seg.osloveien_drobak.t0,
+     delay: seg.osloveien_drobak.delay + dyr, spreng: "ingen"}
   ];
   rows.forEach(r=>{
-    r.verst = r.rush + (r.spreng === "tunnel" ? tunnelExtra : r.spreng === "korridor" ? corridorExtra : 0);
+    r.periode = r.t0d + r.delay;
+    r.sprengVal = r.spreng === "ingen" ? null :
+      r.t0d + (r.spreng === "tunnel" ? tunnelExtra : corridorExtra);
   });
-  const maxV = Math.max(...rows.map(r=>r.verst)) * 1.05;
+  const maxV = Math.max(...rows.map(r=>Math.max(r.periode, r.sprengVal || 0))) * 1.05;
 
   const bar = (val, color, label) => {
     const w = Math.max(2, val / maxV * 76);
@@ -783,10 +828,9 @@ function renderTravel(res){
       <span class="bval">${fmt1(val)} min</span></div></div>`;
   };
 
-  /* Gangfelt-kryssing ved Heer i rush (rv. 152, begge retninger) */
-  const rushFrac = state.rush / 100;
-  const wBefore = crossWaitSec(roadState.rv152_north.base * rushFrac);
-  const wAfter  = crossWaitSec(seg.rv152_north.total * rushFrac);
+  /* Gangfelt-kryssing ved Heer (rv. 152, begge retninger, valgt periode) */
+  const wBefore = crossWaitSec(roadState.rv152_north.base * res.peakFrac);
+  const wAfter  = crossWaitSec(seg.rv152_north.total * res.peakFrac);
   const maxW = Math.max(wAfter, wBefore) * 1.05;
   const wbar = (val, color, label) => {
     const w = Math.max(2, val / maxW * 76);
@@ -795,23 +839,24 @@ function renderTravel(res){
       <span class="bval">ca. ${fmt(val)} sek</span></div></div>`;
   };
 
+  const per = periodShort();
   document.getElementById("ttbars").innerHTML =
     `<div class="cleg">
        <span><i style="background:var(--axisline)"></i>I dag (E134 åpen)</span>
-       <span><i style="background:var(--series)"></i>Under stengingen, i rush</span>
-       <span><i style="background:var(--serious)"></i>… rett etter en sprengningsstenging</span>
+       <span><i style="background:var(--series)"></i>Under stengingen, ${per}</span>
+       <span><i style="background:var(--serious)"></i>Midt på dagen + sprengningskø</span>
      </div>` +
     rows.map(r=>`<div class="j"><div class="jname">${r.name}</div>
       ${bar(r.idag, "var(--axisline)", "I dag")}
-      ${bar(r.rush, "var(--series)", "Under stenging, rush")}
-      ${r.verst > r.rush + 0.05 ? bar(r.verst, "var(--serious)", "Etter sprengningsstenging") : ""}
+      ${bar(r.periode, "var(--series)", "Under stenging, " + per)}
+      ${r.sprengVal ? bar(r.sprengVal, "var(--serious)", "Midt på dagen + sprengningskø") : ""}
     </div>`).join("") +
-    `<div class="j"><div class="jname">🚸 Å krysse rv. 152 i gangfelt ved Heer, i rush</div>
+    `<div class="j"><div class="jname">🚸 Å krysse rv. 152 i gangfelt ved Heer, ${per}</div>
       ${wbar(wBefore, "var(--axisline)", "I dag")}
       ${wbar(wAfter, "var(--series)", "Under stengingen")}
       <div class="fnote">Ventetid på en luke i trafikken stor nok til å krysse (uten lysregulering). Det er mange gangfelt langs strekningen – hver av dem gir også stopp og forsinkelse for bilene, noe som er bakt inn i den lavere kapasiteten på strekket.</div>
     </div>
-    <div class="fnote">«Etter sprengningsstenging» = gjennomsnittlig tillegg i den verste perioden etter en 30-minutters stenging av tunnelen (venting + kø som avvikles). Alle søyler deler samme skala.</div>`;
+    <div class="fnote">Sprengningsstenginger skjer aldri i rushtiden. Søylen «Midt på dagen + sprengningskø» viser derfor en tur i fri flyt midt på dagen pluss gjennomsnittlig venting og kø rett etter en 30-minutters stenging – den skal ikke legges oppå rush-søylen. Alle søyler deler samme skala.</div>`;
 }
 
 /* ---------- Utrykning fra Korsegården brannstasjon ------------------------ */
@@ -824,21 +869,22 @@ function renderFire(res){
   const turnout = 1, vFree = 90;
   const crawlExtra = res.sprengKm * (60/12 - 60/vFree);
 
+  const per = periodShort();
   const heer = {
     name: "Til Heer (ca. 7 km via rv. 152 og Dyrløkke)",
     bars: [
       {v: 7.2/vFree*60 + turnout, c:"var(--axisline)", l:"I dag"},
-      {v: 7.2/vFree*60 + turnout + 0.5*(seg.rv152_east.delay + dyr), c:"var(--series)", l:"Under stenging, rush"}
+      {v: 7.2/vFree*60 + turnout + 0.5*(seg.rv152_east.delay + dyr), c:"var(--series)", l:"Under stenging, " + per}
     ]
   };
   const nfIdag = 17/vFree*60 + turnout;
-  const nfRush = nfIdag + 0.5*(seg.rv152_east.delay + dyr + seg.rv152_north.delay + seg.holtbrat.delay);
+  const nfPeriode = nfIdag + 0.5*(seg.rv152_east.delay + dyr + seg.rv152_north.delay + seg.holtbrat.delay);
   const nf = {
     name: "Til Nordre Frogn/Dal (ca. 17 km, over Ottarsrudbakken og Skarphella)",
     bars: [
       {v: nfIdag, c:"var(--axisline)", l:"I dag"},
-      {v: nfRush, c:"var(--series)", l:"Under stenging, rush"},
-      {v: nfRush + crawlExtra, c:"var(--serious)", l:"… med sprengningskø ved Måna"},
+      {v: nfPeriode, c:"var(--series)", l:"Under stenging, " + per},
+      {v: nfIdag + crawlExtra, c:"var(--serious)", l:"Midt på dagen, med sprengningskø"},
       {v: 24/vFree*60 + turnout + 0.5*seg.fv156.delay, c:"var(--critical)", l:"Ottarsrudbakken sperret → om E6/Nesset"}
     ]
   };
@@ -863,7 +909,7 @@ function renderFire(res){
 /* ---------- Lokale konsekvenser ------------------------------------------- */
 function renderLocal(res){
   const s = res.seg;
-  const smiePeak = s.smieveien.total * (state.rush/100);
+  const smiePeak = s.smieveien.total * res.peakFrac;
   const busR = res.busRush, busO = res.busOffpeak;
   document.getElementById("localstats").innerHTML = `
     <div class="stat warnbox">
@@ -875,17 +921,17 @@ function renderLocal(res){
     </div>
     <div class="stat">
       <div class="t">🚌 Buss Dyrløkke → Oslo</div>
-      <div class="v">+${fmt1(busR)} <small>min i rush</small></div>
+      <div class="v">+${fmt1(busR)} <small>min ${periodShort()}</small></div>
       <div class="d">Ca. +${fmt1(busO)} min utenom rush (lengre trasé om Vinterbro), pluss kø på Osloveien og ved Dyrløkke i rushtiden.</div>
     </div>
     <div class="stat">
       <div class="t">🛒 Drøbak City / Dyrløkke</div>
       <div class="v">+${fmt(s.rv152_east.extra)} <small>kjt/døgn forbi</small></div>
-      <div class="d">Gjennomgangstrafikken passerer kjøpesenteret og kollektivknutepunktet. Estimert ekstra ventetid i krysset i rush: ca. <b>${fmt1(res.dyrlokkeDelay)} min</b>.</div>
+      <div class="d">Gjennomgangstrafikken passerer kjøpesenteret og kollektivknutepunktet. Estimert ekstra ventetid i krysset ${periodShort()}: ca. <b>${fmt1(res.dyrlokkeDelay)} min</b>.</div>
     </div>
     <div class="stat">
       <div class="t">🏘️ Drøbak sentrum → Dyrløkke</div>
-      <div class="v">+${fmt1(s.osloveien_drobak.delay + res.dyrlokkeDelay)} <small>min i rush</small></div>
+      <div class="v">+${fmt1(s.osloveien_drobak.delay + res.dyrlokkeDelay)} <small>min ${periodShort()}</small></div>
       <div class="d">Ingen omkjøringstrafikk på selve strekningen, men alt lokalt kjøremønster møter den økte trafikken ved Dyrløkke.</div>
     </div>
     <div class="stat warnbox">
@@ -896,11 +942,21 @@ function renderLocal(res){
       E134 er dimensjonert for tungtransport – lokal- og fylkesveiene har svakere standard, og Skarphella er i dårlig forfatning allerede.
       Faktisk bruksklasse/tillatt akseltrykk per vei kan slås opp i NVDB Vegkart.</div>
     </div>
+    <div class="stat warnbox">
+      <div class="t">🚴 Syklister på Osloveien (Bakker bru–Mosseveien)</div>
+      <div class="v">${fmt(res.bike.overtUnder)} <small>forbikjøringer per sykkeltur ${periodShort()}</small></div>
+      <div class="d">I dag: ca. ${fmt(res.bike.overtNow)} per tur. Av forbikjøringene under stengingen skjer
+      ca. <b>${fmt(res.bike.dangerous)}</b> med møtende trafikk – altså over midtlinjen mot motgående bil.
+      Strekningen mangler eget gang- og sykkelfelt, og syklistene pendler i samme retning som biltrafikken
+      (mot Oslo om morgenen, hjem om ettermiddagen). Syklister i kjørebanen forsinker også bilene –
+      det er regnet inn i belastningen på Osloveien.</div>
+    </div>
     <div class="stat ${state.spreng ? "warnbox" : ""}">
-      <div class="t">🧨 Sprengningsstenging av tunnelen (30 min)</div>
+      <div class="t">🧨 Sprengningsstenging av tunnelen (30 min, aldri i rush)</div>
       <div class="v">ca. ${fmt(res.sprengQueue)} <small>biler i kø på Frogn-siden</small></div>
       <div class="d">Opptil ca. ${fmt1(res.sprengKm)} km kø fra Måna bakover forbi Biltema mot Ottarsrud,
       og ca. ${res.sprengClearMin >= 99 ? "over 60" : fmt(res.sprengClearMin)} min etter åpning før køen er borte – inntil 6 ganger daglig i opptil 3 år.
+      Sprengning skjer aldri i rushtiden: Køen beregnes fra en time midt på dagen og kommer i tillegg til rushkøene.
       Mens køen står, er det svært vanskelig å komme inn fra sideveiene (Ottarsrudgrenda, Heerveien, Skanseveien, Osloveien-krysset)
       – og krevende for gående å krysse veien.</div>
     </div>
@@ -932,6 +988,9 @@ document.getElementById("methodbody").innerHTML = `
     <li>Timeprofilen er et typisk pendlerdøgn med topper kl. 07–09 og 15–17.</li>
     <li>Boliggater/skoleveier (som Smieveien-ruten over Heer) farges etter <em>total trafikkmengde</em>, ikke etter bilflyt: under 500 kjt/døgn regnes som akseptabelt, 500–1&nbsp;000 belastende, 1&nbsp;000–2&nbsp;000 uholdbart som skolevei, og over 2&nbsp;000 kritisk. Dette er planfaglige tommelfingerregler for gater uten fortau/gangfelt – god flyt for bilene kan samtidig være uholdbart for gående.</li>
     <li>Kapasiteten på rv. 152 Dyrløkke–Måna er satt lavere enn på de andre hovedstrekningene (750 mot 850 kjt/t/retning) fordi strekket har mange kryss og avkjørsler med stor friksjon – Heerveien, Skanseveien, Osloveien-krysset og Ottarsrudgrenda – samt kryssende fotgjengere ved Heer.</li>
+    <li>Tidspunkt-velgeren styrer hvilken periode tallene gjelder: morgenrush (mest trafikk mot E6) og ettermiddagsrush (mest mot Drøbak) bruker den valgte rushandelen med 60&nbsp;% i tyngste retning, mens «utenom rush» bruker en typisk time midt på dagen (ca. 4,5&nbsp;% av døgntrafikken, jevn retning).</li>
+    <li>Sprengningsstenginger av tunnelen skjer aldri i rushtiden (iflg. Statens vegvesen). Sprengningsscenarier vises derfor alltid som «midt på dagen + sprengningskø», i tillegg til – aldri oppå – rushberegningene.</li>
+    <li>Syklistmodellen (Osloveien, Bakker bru–Mosseveien, ca. 4 km uten eget gang- og sykkelfelt): 20&nbsp;% av døgnets sykkelturer antas i makstimen i pendlerretningen (6&nbsp;% utenom rush), fart ca. 20 km/t. Forbikjøringer per tur = bilstrøm i samme retning × tid på strekningen; andelen «farlige» forbikjøringer er Poisson-sannsynligheten for minst én møtende bil i et forbikjøringsvindu på ca. 10 sekunder (1&nbsp;−&nbsp;e^−λt). Hver syklist regnes som ca. 3 personbilekvivalenter i kapasitetsberegningen, siden biler må over midtlinjen for å passere. Antall syklister i dag er ukjent og satt til 100/døgn – juster gjerne.</li>
     <li>I vintermodus reduseres kapasiteten ca. 30 % i bakkene, og 25 % av trafikken som ellers ville valgt rutene over Ottarsrudbakken og Skarphella/Rundvollbakkene flyttes til Osloveien – de tre mekanismene (kapasitet, ruteomvalg og sprengningskø) virker sammen. Der etterspørselen overstiger kapasiteten i makstimen, oppgis også hvor fort køen vokser, siden kø hoper seg opp så lenge rushet varer – en statisk formel undervurderer dette.</li>
     <li>Kjente forenklinger som trekker hver sin vei: Osloveien-trafikken bruker i praksis også rv. 152 mellom Måna og Bakker (ikke medregnet der – undervurderer), mens Smieveien-snarveien ikke trekkes fra rv. 152-trafikken (overvurderer rv. 152 litt). Alle trafikktall gjelder begge kjøreretninger; sprengningskøen beregnes for Frogn-siden, og tilsvarende kø oppstår på Hurum-siden.</li>
     <li>«Sprengningsstenging av tunnelen» viser køoppbygging ved en 30-minutters stenging midt på dagen (Vegvesenet varsler inntil 6 slike per dag i opptil 3 år, utenom rush): all tunneltrafikk stanser ved Måna, køen vokser bakover langs rv. 152/Holtbråtveien, og lengde og avviklingstid beregnes med enkel kø-teori ut fra trafikkmengden og kapasiteten du har valgt.</li>
@@ -954,6 +1013,7 @@ function currentHash(){
   const parts = Object.keys(PARAMS).map(k=>k+"="+state[k]);
   parts.push("vinter="+state.vinter);
   parts.push("spreng="+state.spreng);
+  parts.push("tm="+state.tm);
   return "#" + parts.join("&");
 }
 function writeHash(){
@@ -973,6 +1033,9 @@ function readHash(){
       state.spreng = +v ? 1 : 0;
       const cb = document.getElementById("cb_spreng");
       if (cb) cb.checked = !!state.spreng;
+    } else if (k === "tm" && ["am","pm","off"].includes(v)){
+      state.tm = v;
+      document.querySelectorAll("#tmctl button").forEach(x=>x.classList.toggle("on", x.dataset.tm === v));
     } else if (PARAMS[k] && v!==undefined && !isNaN(+v)){
       state[k] = Math.min(PARAMS[k].max, Math.max(PARAMS[k].min, +v));
       const el = document.getElementById("sl_"+k);
@@ -1002,6 +1065,7 @@ document.getElementById("resetbtn").addEventListener("click", ()=>{
   for (const k in PARAMS){ state[k]=PARAMS[k].def; document.getElementById("sl_"+k).value = state[k]; }
   state.vinter = 0; document.getElementById("cb_vinter").checked = false;
   state.spreng = 0; document.getElementById("cb_spreng").checked = false;
+  state.tm = "am"; document.querySelectorAll("#tmctl button").forEach(x=>x.classList.toggle("on", x.dataset.tm === "am"));
   for (const id in ROADS){
     roadState[id] = {base: ROADS[id].base, cap: ROADS[id].cap};
     document.getElementById("base_"+id).value = roadState[id].base;
@@ -1025,10 +1089,14 @@ function update(){
     roadLines[id].bindPopup(`<b>${ROADS[id].name}</b><br>
       Ekstra: <b>${v.extra>0?"+":""}${fmt(v.extra)}</b> kjt/døgn &nbsp;·&nbsp; Totalt: <b>${fmt(v.total)}</b> kjt/døgn<br>
       Makstime: ca. ${fmt(v.peakVehDir)} kjt/t i verste retning (${Math.round(v.vc*100)} % av kapasitet)<br>
-      ${lv.sym} ${lv.t}${v.delay>=0.5 ? " · ca. +"+fmt1(v.delay)+" min i rush" : ""}${v.overflow > 10 ? "<br>Etterspørselen overstiger kapasiteten i makstimen: køen vokser med ca. "+fmt(v.overflow)+" biler per time så lenge rushet varer." : ""}`);
+      ${lv.sym} ${lv.t}${v.delay>=0.5 ? " · ca. +"+fmt1(v.delay)+" min "+periodShort() : ""}${v.overflow > 10 ? "<br>Etterspørselen overstiger kapasiteten i makstimen: køen vokser med ca. "+fmt(v.overflow)+" biler per time så lenge perioden varer." : ""}${state.spreng && (id === "rv152_north" || id === "holtbrat") ? "<br>🧨 Sprengningskøene kommer utenom rush (aldri i rushtiden) – i tillegg til belastningen vist her. Se den røde stripen." : ""}`);
   }
   drawQueue(res);
   riskMarkers.forEach(({marker, p})=>{
+    if (p.bike){
+      marker.bindPopup(`<b>🚴 ${p.name}</b><br>${p.desc}<br>Ca. <b>${fmt(res.bike.overtUnder)}</b> forbikjøringer per sykkeltur ${periodShort()}, hvorav ca. <b>${fmt(res.bike.dangerous)}</b> med møtende trafikk.`);
+      return;
+    }
     const t = res.seg[p.road] ? res.seg[p.road].tunge : 0;
     marker.bindPopup(`<b>⚠️ ${p.name}</b><br>${p.desc}<br>Anslått ekstra tungtrafikk her: <b>+${fmt(t)}</b> tunge kjøretøy/døgn${state.vinter ? " – <b>vinterføre aktivert</b>" : ""}.`);
   });
