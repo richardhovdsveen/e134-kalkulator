@@ -340,9 +340,12 @@ const RISKPOINTS = [
    desc:"Bakke i dårlig forfatning som tåler dagens belastning dårlig. Et vogntog som står fast her vinterstid sperrer veien."},
   {ll:[59.71472,10.70808], name:"Rundvollbakkene", road:"fv156",
    desc:"Bratte bakker der biler og vogntog står fast på vinterføre."},
-  {ll:[59.68830,10.68150], name:"Osloveien: syklister i kjørebanen", road:"osloveien_north", icon:"🚴", bike:true,
-   desc:"Bakker bru–Mosseveien mangler eget gang- og sykkelfelt. Pendlersyklister mot Oslo deler kjørebanen med omkjøringstrafikken – farlig for syklistene, og forsinkende for bilene."}
+  {ll:[59.68490,10.71900], name:"Osloveien mot Horgenkrysset: syklister i kjørebanen", road:"osloveien_north", icon:"🚴", bike:true,
+   desc:"Østre del av Osloveien, ned mot Horgenkrysset ved Mosseveien/E6, mangler eget gang- og sykkelfelt. Pendlersyklister mot Oslo deler kjørebanen med omkjøringstrafikken – farlig for syklistene, og forsinkende for bilene."}
 ];
+/* Osloveien-strekningen uten gang- og sykkelfelt (ned mot Horgenkrysset/Mosseveien) */
+const BIKE_STRETCH = [[59.69198,10.70278],[59.68598,10.7054],[59.68404,10.7115],[59.68548,10.7279],[59.68834,10.73243],[59.6894,10.73608]];
+
 /* Strekninger med bakker som rammes av vinterføre (redusert kapasitet i vintermodus) */
 const WINTER_ROADS = {rv152_north:1, holtbrat:1, fv156:1};
 
@@ -363,7 +366,7 @@ const PARAMS = {
   tung:     {group:"tung", label:"Andel tunge kjøretøy (lastebil/vogntog)", unit:" %", min:5, max:25, step:1, def:12,
              desc:"Tungtrafikkandelen på E134 i dag. Brukes til å anslå vogntog per døgn over Ottarsrudbakken, Skarphella og Rundvollbakkene."},
   sykkel:   {group:"local", label:"Syklister Drøbak–Oslo via Osloveien", unit:" per døgn", min:0, max:500, step:10, def:100,
-             desc:"Antallet i dag er ukjent – juster gjerne. Pendlersyklister deler kjørebanen med bilene der strekningen Bakker bru–Mosseveien mangler eget gang- og sykkelfelt."},
+             desc:"Antallet i dag er ukjent – juster gjerne. Pendlersyklister deler kjørebanen med bilene på østre del av Osloveien, ned mot Horgenkrysset ved Mosseveien, der det ikke er eget gang- og sykkelfelt."},
   smie:     {group:"local", label:"Snikkjøring: andel av rv. 152-trafikken som tar Smieveien", unit:" %", min:0, max:15, step:1, def:3,
              desc:"Snarveien fra rundkjøringen på Dyrløkke gjennom Smieveien, over Heer og via Heerveien ut på rv. 152 ved Bakker – boliggater uten gangfelt. Selv få prosent gir mange biler."}
 };
@@ -451,12 +454,12 @@ function compute(){
   res.busOffpeak = 2;                                          // lengre trasé, uten kø
   res.busRush = res.busOffpeak + res.seg.osloveien_north.delay + res.dyrlokkeDelay;
 
-  /* Syklistenes sikkerhet på Osloveien (Bakker bru–Mosseveien, ca. 4 km,
-     ca. 20 km/t): forbikjøringer per tur = bilstrøm i samme retning × tid på
+  /* Syklistenes sikkerhet på Osloveien (østre del ned mot Horgenkrysset,
+     ca. 2,6 km, ca. 20 km/t): forbikjøringer per tur = bilstrøm i samme retning × tid på
      strekningen. Farlig andel = sannsynlighet for møtende bil i et
      forbikjøringsvindu på ca. 10 sekunder. */
   const oslT = res.seg.osloveien_north;
-  const bikeTime = 4 / 20;                                    // timer på strekningen
+  const bikeTime = 2.6 / 20;                                  // timer på strekningen (ca. 2,6 km)
   const qSameNow   = roadState.osloveien_north.base * peakFrac * dirShare;
   const qSameUnder = oslT.total * peakFrac * dirShare;
   const qOppUnder  = oslT.total * peakFrac * (1 - dirShare);
@@ -566,6 +569,8 @@ let map = null;
     L.circleMarker(p.ll, {radius:5, color:"#0b0b0b", weight:1.5, fillColor:"#fcfcfb", fillOpacity:1})
      .addTo(map).bindPopup(`<b>${p.name}</b><br>${p.desc}`);
   });
+  L.polyline(BIKE_STRETCH, {color:"#4a3aa7", weight:3, dashArray:"6 6", opacity:.95})
+    .addTo(map).bindPopup("<b>🚴 Osloveien mot Horgenkrysset</b><br>Strekning uten eget gang- og sykkelfelt – syklister deler kjørebanen med omkjøringstrafikken.");
   RISKPOINTS.forEach(p=>{
     const icon = L.divIcon({className:"", html:'<div style="font-size:19px;line-height:19px">'+(p.icon||"⚠️")+'</div>', iconSize:[19,19], iconAnchor:[10,10]});
     riskMarkers.push({marker: L.marker(p.ll, {icon}).addTo(map), p});
@@ -582,6 +587,7 @@ let map = null;
       <div class="row"><span class="sw dash"></span> E134 stengt</div>
       <div class="row"><span class="sw tun"></span> Oslofjordtunnelen (åpen)</div>
       <div class="row">⚠️ Risikopunkt: vogntog, sving, vinterføre</div>
+      <div class="row"><span class="sw" style="background:repeating-linear-gradient(90deg,#4a3aa7 0 5px,transparent 5px 10px);height:3px"></span> Sykkel i kjørebanen (mangler g/s-felt)</div>
       <div class="row" style="color:var(--muted)">Linjetykkelse = ekstra trafikk.<br>Boliggater farges etter total trafikk<br>(bomiljø), ikke etter bilflyt.</div>`;
     return div;
   };
@@ -943,7 +949,7 @@ function renderLocal(res){
       Faktisk bruksklasse/tillatt akseltrykk per vei kan slås opp i NVDB Vegkart.</div>
     </div>
     <div class="stat warnbox">
-      <div class="t">🚴 Syklister på Osloveien (Bakker bru–Mosseveien)</div>
+      <div class="t">🚴 Syklister på Osloveien (mot Horgenkrysset/Mosseveien)</div>
       <div class="v">${fmt(res.bike.overtUnder)} <small>forbikjøringer per sykkeltur ${periodShort()}</small></div>
       <div class="d">I dag: ca. ${fmt(res.bike.overtNow)} per tur. Av forbikjøringene under stengingen skjer
       ca. <b>${fmt(res.bike.dangerous)}</b> med møtende trafikk – altså over midtlinjen mot motgående bil.
@@ -990,7 +996,7 @@ document.getElementById("methodbody").innerHTML = `
     <li>Kapasiteten på rv. 152 Dyrløkke–Måna er satt lavere enn på de andre hovedstrekningene (750 mot 850 kjt/t/retning) fordi strekket har mange kryss og avkjørsler med stor friksjon – Heerveien, Skanseveien, Osloveien-krysset og Ottarsrudgrenda – samt kryssende fotgjengere ved Heer.</li>
     <li>Tidspunkt-velgeren styrer hvilken periode tallene gjelder: morgenrush (mest trafikk mot E6) og ettermiddagsrush (mest mot Drøbak) bruker den valgte rushandelen med 60&nbsp;% i tyngste retning, mens «utenom rush» bruker en typisk time midt på dagen (ca. 4,5&nbsp;% av døgntrafikken, jevn retning).</li>
     <li>Sprengningsstenginger av tunnelen skjer aldri i rushtiden (iflg. Statens vegvesen). Sprengningsscenarier vises derfor alltid som «midt på dagen + sprengningskø», i tillegg til – aldri oppå – rushberegningene.</li>
-    <li>Syklistmodellen (Osloveien, Bakker bru–Mosseveien, ca. 4 km uten eget gang- og sykkelfelt): 20&nbsp;% av døgnets sykkelturer antas i makstimen i pendlerretningen (6&nbsp;% utenom rush), fart ca. 20 km/t. Forbikjøringer per tur = bilstrøm i samme retning × tid på strekningen; andelen «farlige» forbikjøringer er Poisson-sannsynligheten for minst én møtende bil i et forbikjøringsvindu på ca. 10 sekunder (1&nbsp;−&nbsp;e^−λt). Hver syklist regnes som ca. 3 personbilekvivalenter i kapasitetsberegningen, siden biler må over midtlinjen for å passere. Antall syklister i dag er ukjent og satt til 100/døgn – juster gjerne.</li>
+    <li>Syklistmodellen (østre del av Osloveien ned mot Horgenkrysset ved Mosseveien, ca. 2,6 km uten eget gang- og sykkelfelt – markert med stiplet lilla linje på kartet): 20&nbsp;% av døgnets sykkelturer antas i makstimen i pendlerretningen (6&nbsp;% utenom rush), fart ca. 20 km/t. Forbikjøringer per tur = bilstrøm i samme retning × tid på strekningen; andelen «farlige» forbikjøringer er Poisson-sannsynligheten for minst én møtende bil i et forbikjøringsvindu på ca. 10 sekunder (1&nbsp;−&nbsp;e^−λt). Hver syklist regnes som ca. 3 personbilekvivalenter i kapasitetsberegningen, siden biler må over midtlinjen for å passere. Antall syklister i dag er ukjent og satt til 100/døgn – juster gjerne.</li>
     <li>I vintermodus reduseres kapasiteten ca. 30 % i bakkene, og 25 % av trafikken som ellers ville valgt rutene over Ottarsrudbakken og Skarphella/Rundvollbakkene flyttes til Osloveien – de tre mekanismene (kapasitet, ruteomvalg og sprengningskø) virker sammen. Der etterspørselen overstiger kapasiteten i makstimen, oppgis også hvor fort køen vokser, siden kø hoper seg opp så lenge rushet varer – en statisk formel undervurderer dette.</li>
     <li>Kjente forenklinger som trekker hver sin vei: Osloveien-trafikken bruker i praksis også rv. 152 mellom Måna og Bakker (ikke medregnet der – undervurderer), mens Smieveien-snarveien ikke trekkes fra rv. 152-trafikken (overvurderer rv. 152 litt). Alle trafikktall gjelder begge kjøreretninger; sprengningskøen beregnes for Frogn-siden, og tilsvarende kø oppstår på Hurum-siden.</li>
     <li>«Sprengningsstenging av tunnelen» viser køoppbygging ved en 30-minutters stenging midt på dagen (Vegvesenet varsler inntil 6 slike per dag i opptil 3 år, utenom rush): all tunneltrafikk stanser ved Måna, køen vokser bakover langs rv. 152/Holtbråtveien, og lengde og avviklingstid beregnes med enkel kø-teori ut fra trafikkmengden og kapasiteten du har valgt.</li>
