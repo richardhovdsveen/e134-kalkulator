@@ -155,6 +155,7 @@ footer.site{max-width:1400px; margin:0 auto; padding:0 22px 34px; color:var(--mu
 <body>
 <header class="site">
   <h1>Hva skjer med veiene våre når E134 stenger? <span class="badge">Uoffisiell borgersimulering</span></h1>
+  <p class="sub" style="margin-bottom:6px"><a id="flytlink" href="flyt.html"><b>Ny: Se trafikkflyten time for time, i begge retninger →</b></a></p>
   <p class="sub">Under byggingen av nytt løp i Oslofjordtunnelen skal E134 mellom Vassum (E6) og rundkjøringen på Måna
   etter planen stenges i en sammenhengende periode på om lag to år (trafikkomlegging 2027–2028).
   Dagens trafikk må da ut på lokalveiene. Dra i bryterne og se hva <em>dine</em> forutsetninger betyr for
@@ -181,7 +182,7 @@ footer.site{max-width:1400px; margin:0 auto; padding:0 22px 34px; color:var(--mu
         <div id="sliders-tung"></div>
         <div class="slider">
           <label style="cursor:pointer"><span><input type="checkbox" id="cb_vinter" style="accent-color:var(--series);margin-right:6px">Vinterføre i bakkene</span></label>
-          <div class="desc">Reduserer kapasiteten ca. 30 % på strekningene med Ottarsrudbakken, Skarphella og Rundvollbakkene, slik en dag med glatte bakker og fastkjørte vogntog gjør.</div>
+          <div class="desc">Reduserer kapasiteten ca. 30 % på strekningene med Ottarsrudbakken, Skarphella og Rundvollbakkene, og flytter 25 % av bakke-trafikken over på Osloveien – slik en dag med glatte bakker faktisk gjør. Osloveien får altså mer trafikk i vintermodus.</div>
         </div>
         <div class="slider">
           <label style="cursor:pointer"><span><input type="checkbox" id="cb_spreng" style="accent-color:var(--series);margin-right:6px">Sprengningsstenging av tunnelen (30 min)</span></label>
@@ -381,12 +382,20 @@ function compute(){
   const south = remaining * (s.sorandel/100);
   const north = remaining - south;
 
+  /* Rutefordeling. På vinterføre antas 25 % av trafikken som ellers ville
+     kjørt over bakkene (Ottarsrudbakken via rv. 152, Skarphella/Rundvoll-
+     bakkene via Holtbråtveien/fv. 156) å velge Osloveien i stedet –
+     Osloveien får altså MER trafikk når bakkene er vanskelige. */
+  const vinterShift = state.vinter ? 0.25 : 0;
+  const via152  = south * (s.sor152/100);
+  const viaFv   = north * (1 - s.nordoslo/100);
   const extra = {
-    rv152_east:      south * (s.sor152/100),
-    rv152_north:     south * (s.sor152/100),
-    osloveien_north: south * (1 - s.sor152/100) + north * (s.nordoslo/100),
-    holtbrat:        north * (1 - s.nordoslo/100),
-    fv156:           north * (1 - s.nordoslo/100),
+    rv152_east:      via152 * (1 - vinterShift),
+    rv152_north:     via152 * (1 - vinterShift),
+    osloveien_north: south * (1 - s.sor152/100) + north * (s.nordoslo/100)
+                     + (via152 + viaFv) * vinterShift,
+    holtbrat:        viaFv * (1 - vinterShift),
+    fv156:           viaFv * (1 - vinterShift),
     osloveien_drobak: 0
   };
   extra.smieveien = (s.smie/100) * (roadState.rv152_north.base + extra.rv152_north);
@@ -404,7 +413,8 @@ function compute(){
     const t0 = r.lenKm / r.speed * 60;
     const delay = bprDelayMin(t0, vc);
     const tunge = ex * (s.tung/100);                          // ekstra tunge kjøretøy per døgn
-    res.seg[id] = {extra: ex, total, peakVehDir, vc, t0, delay, tunge};
+    const overflow = Math.max(0, peakVehDir - cap);           // biler/t utover kapasitet i makstimen
+    res.seg[id] = {extra: ex, total, peakVehDir, vc, t0, delay, tunge, capEff: cap, overflow};
   }
 
   /* Dyrløkke-krysset: grov modell for ekstra ventetid der rutene møtes */
@@ -422,9 +432,9 @@ function compute(){
      Holtbråtveien. Enkel kø-teori: ankomstrate a, utløsning s etter åpning. */
   const tunnelDayVol = remaining;                       // tunneltrafikk som fortsatt kjører
   const aDir = tunnelDayVol * 0.045 / 2;                // kjt/t per retning midt på dagen
-  res.sprengQueue = Math.round(aDir / 2);               // biler i kø per retning etter 30 min
+  res.sprengQueue = Math.round(aDir / 2);               // biler i kø på Frogn-siden (retning tunnelen) etter 30 min
   res.sprengKm = res.sprengQueue * 7 / 1000;            // kølengde per retning (7 m per bil)
-  const sCap = roadState.rv152_north.cap;
+  const sCap = roadState.rv152_north.cap * (state.vinter ? 0.7 : 1);
   res.sprengClearMin = aDir < sCap ? Math.round(60 * res.sprengQueue / (sCap - aDir)) : 99;
 
   return res;
@@ -569,7 +579,7 @@ function drawQueue(res){
   queueLine = L.polyline(pts, {color:"#d03b3b", weight:12, opacity:.45, lineCap:"butt"})
     .addTo(map)
     .bindPopup(`<b>🧨 Sprengningskø ved Måna</b><br>
-      Ca. <b>${fmt(res.sprengQueue)}</b> biler i kø per retning – rundt <b>${fmt1(res.sprengKm)} km</b> bakover forbi Biltema.<br>
+      Ca. <b>${fmt(res.sprengQueue)}</b> biler i kø i retning tunnelen (tilsvarende kø bygger seg opp på Hurum-siden) – rundt <b>${fmt1(res.sprengKm)} km</b> bakover forbi Biltema.<br>
       Ca. ${res.sprengClearMin >= 99 ? "over 60" : fmt(res.sprengClearMin)} min etter åpning før køen er avviklet.
       Sideveiene langs strekket er i praksis sperret mens køen står.`);
 }
@@ -623,6 +633,7 @@ function renderSegments(res){
         <div class="num"><b class="delta ${v.extra>0?"up":""}">${v.extra>0?"+":""}${fmt(v.extra)}</b><span>ekstra kjt/døgn</span></div>
         <div class="num"><b>${fmt(v.total)}</b><span>totalt kjt/døgn</span></div>
         <div class="num"><b>${v.delay>=0.5?"+"+fmt1(v.delay)+" min":"–"}</b><span>forsinkelse i rush</span></div>
+        ${v.overflow > 10 ? `<div class="num"><b class="up">+${fmt(v.overflow)}/t</b><span>kø som hoper seg opp</span></div>` : ""}
       </div>
       <span class="chip" style="color:${lv.hex}"><span class="dot" style="background:${lv.hex}"></span>${lv.t}${r.kind==="boliggate" ? "" : " · "+Math.round(v.vc*100)+" % av kapasitet"}</span>
     </div>`;
@@ -887,7 +898,7 @@ function renderLocal(res){
     </div>
     <div class="stat ${state.spreng ? "warnbox" : ""}">
       <div class="t">🧨 Sprengningsstenging av tunnelen (30 min)</div>
-      <div class="v">ca. ${fmt(res.sprengQueue)} <small>biler i kø per retning</small></div>
+      <div class="v">ca. ${fmt(res.sprengQueue)} <small>biler i kø på Frogn-siden</small></div>
       <div class="d">Opptil ca. ${fmt1(res.sprengKm)} km kø fra Måna bakover forbi Biltema mot Ottarsrud,
       og ca. ${res.sprengClearMin >= 99 ? "over 60" : fmt(res.sprengClearMin)} min etter åpning før køen er borte – inntil 6 ganger daglig i opptil 3 år.
       Mens køen står, er det svært vanskelig å komme inn fra sideveiene (Ottarsrudgrenda, Heerveien, Skanseveien, Osloveien-krysset)
@@ -895,7 +906,7 @@ function renderLocal(res){
     </div>
     <div class="stat ${state.vinter ? "warnbox" : ""}">
       <div class="t">🚑 Beredskap Nordre Frogn og Nesodden</div>
-      <div class="v">${state.vinter ? "Uholdbar på vinterføre" : "Sårbar"}</div>
+      <div class="v">${state.vinter ? "Svært sårbar på vinterføre" : "Sårbar"}</div>
       <div class="d">Med E134 stengt går alle ruter nordover gjennom bakker der kjøretøy setter seg fast vinterstid
       (Ottarsrudbakken, Skarphella, Rundvollbakkene). Ett fastkjørt vogntog i feil bakke kan da sperre
       utrykningsruten til Nordre Frogn og Nesodden${state.vinter ? " – i vintermodusen er kapasiteten i bakkene redusert 30&nbsp;%" : ""}.</div>
@@ -921,6 +932,8 @@ document.getElementById("methodbody").innerHTML = `
     <li>Timeprofilen er et typisk pendlerdøgn med topper kl. 07–09 og 15–17.</li>
     <li>Boliggater/skoleveier (som Smieveien-ruten over Heer) farges etter <em>total trafikkmengde</em>, ikke etter bilflyt: under 500 kjt/døgn regnes som akseptabelt, 500–1&nbsp;000 belastende, 1&nbsp;000–2&nbsp;000 uholdbart som skolevei, og over 2&nbsp;000 kritisk. Dette er planfaglige tommelfingerregler for gater uten fortau/gangfelt – god flyt for bilene kan samtidig være uholdbart for gående.</li>
     <li>Kapasiteten på rv. 152 Dyrløkke–Måna er satt lavere enn på de andre hovedstrekningene (750 mot 850 kjt/t/retning) fordi strekket har mange kryss og avkjørsler med stor friksjon – Heerveien, Skanseveien, Osloveien-krysset og Ottarsrudgrenda – samt kryssende fotgjengere ved Heer.</li>
+    <li>I vintermodus reduseres kapasiteten ca. 30 % i bakkene, og 25 % av trafikken som ellers ville valgt rutene over Ottarsrudbakken og Skarphella/Rundvollbakkene flyttes til Osloveien – de tre mekanismene (kapasitet, ruteomvalg og sprengningskø) virker sammen. Der etterspørselen overstiger kapasiteten i makstimen, oppgis også hvor fort køen vokser, siden kø hoper seg opp så lenge rushet varer – en statisk formel undervurderer dette.</li>
+    <li>Kjente forenklinger som trekker hver sin vei: Osloveien-trafikken bruker i praksis også rv. 152 mellom Måna og Bakker (ikke medregnet der – undervurderer), mens Smieveien-snarveien ikke trekkes fra rv. 152-trafikken (overvurderer rv. 152 litt). Alle trafikktall gjelder begge kjøreretninger; sprengningskøen beregnes for Frogn-siden, og tilsvarende kø oppstår på Hurum-siden.</li>
     <li>«Sprengningsstenging av tunnelen» viser køoppbygging ved en 30-minutters stenging midt på dagen (Vegvesenet varsler inntil 6 slike per dag i opptil 3 år, utenom rush): all tunneltrafikk stanser ved Måna, køen vokser bakover langs rv. 152/Holtbråtveien, og lengde og avviklingstid beregnes med enkel kø-teori ut fra trafikkmengden og kapasiteten du har valgt.</li>
     <li>Utrykningsanalysen antar kasernert stasjon (ca. 1 min utrykningstid), ca. 90 km/t med blålys på fri vei, ca. 12 km/t forbi stående kø, og at kø i rush koster utrykningen halvparten av bilistenes forsinkelse. Avstander: Korsegården stasjon–Heer ca. 7 km, –Nordre Frogn/Dal ca. 17 km via Ottarsrudbakken og Skarphella, ca. 24 km via omkjøringen E6–Nesset–fv. 156.</li>
     <li>Tungtrafikk anslås som en justerbar andel av omkjøringstrafikken og vises for risikopunktene Ottarsrudbakken (bratt bakke, ca. 110° sving), Skarphella (dårlig forfatning) og Rundvollbakkene. «Vinterføre i bakkene» reduserer kapasiteten ca. 30&nbsp;% på disse strekningene. Faktisk bruksklasse og tillatt akseltrykk per vei finnes i <a href="https://vegkart.atlas.vegvesen.no/" target="_blank" rel="noopener">NVDB Vegkart</a>.</li>
@@ -945,6 +958,8 @@ function currentHash(){
 }
 function writeHash(){
   try { history.replaceState(null,"",currentHash()); } catch(e){ /* sandboxede visninger tillater ikke dette */ }
+  const fl = document.getElementById("flytlink");
+  if (fl) fl.href = "flyt.html" + currentHash();
 }
 function readHash(){
   if (!location.hash) return;
@@ -1010,7 +1025,7 @@ function update(){
     roadLines[id].bindPopup(`<b>${ROADS[id].name}</b><br>
       Ekstra: <b>${v.extra>0?"+":""}${fmt(v.extra)}</b> kjt/døgn &nbsp;·&nbsp; Totalt: <b>${fmt(v.total)}</b> kjt/døgn<br>
       Makstime: ca. ${fmt(v.peakVehDir)} kjt/t i verste retning (${Math.round(v.vc*100)} % av kapasitet)<br>
-      ${lv.sym} ${lv.t}${v.delay>=0.5 ? " · ca. +"+fmt1(v.delay)+" min i rush" : ""}`);
+      ${lv.sym} ${lv.t}${v.delay>=0.5 ? " · ca. +"+fmt1(v.delay)+" min i rush" : ""}${v.overflow > 10 ? "<br>Etterspørselen overstiger kapasiteten i makstimen: køen vokser med ca. "+fmt(v.overflow)+" biler per time så lenge rushet varer." : ""}`);
   }
   drawQueue(res);
   riskMarkers.forEach(({marker, p})=>{
