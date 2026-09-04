@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>E134-stengingen: Trafikkflyt time for time</title>
+<meta name="description" content="Uoffisiell borgersimulering: Se hvordan trafikken flyter i begge retninger på omkjøringsveiene i Frogn, time for time gjennom døgnet, når E134 Vassum–Måna er stengt.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  color-scheme: light;
+  --page:#f9f9f7; --surface:#fcfcfb; --surface-2:#f0efec;
+  --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axisline:#c3c2b7; --border:rgba(11,11,11,.10);
+  --series:#2a78d6;
+  --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --critical:#d03b3b;
+}
+@media (prefers-color-scheme: dark){
+  :root:where(:not([data-theme="light"])){
+    color-scheme: dark;
+    --page:#0d0d0d; --surface:#1a1a19; --surface-2:#242422;
+    --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axisline:#383835; --border:rgba(255,255,255,.10);
+    --series:#3987e5;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--page); color:var(--ink); font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+a{color:var(--series)}
+header.site{padding:18px 22px 12px; max-width:1400px; margin:0 auto}
+header.site h1{font-size:21px; margin:0 0 4px}
+header.site .sub{color:var(--ink-2); max-width:75ch; margin:0}
+.badge{display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:99px; border:1px solid var(--border); background:var(--surface-2); color:var(--ink-2); vertical-align:middle; margin-left:8px}
+.layout{display:grid; grid-template-columns:minmax(380px,7fr) minmax(340px,5fr); gap:16px; max-width:1400px; margin:0 auto; padding:0 22px 30px}
+@media (max-width:980px){.layout{grid-template-columns:1fr}.mapwrap{position:static !important; height:60vh !important}}
+.mapwrap{position:sticky; top:12px; height:calc(100vh - 24px); min-height:420px; border-radius:12px; overflow:hidden; border:1px solid var(--border); background:var(--surface)}
+#map{width:100%; height:100%}
+.leaflet-container{font:inherit; background:var(--surface-2)}
+.maplegend{background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:8px 10px; font-size:12px; line-height:1.6; box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.maplegend .row{display:flex; align-items:center; gap:7px}
+.maplegend .sw{width:18px; height:4px; border-radius:2px; flex:none}
+.panel{display:flex; flex-direction:column; gap:14px}
+.card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px}
+.card h2{font-size:14px; margin:0 0 6px}
+.card h2 .hint{font-weight:400; color:var(--muted); font-size:12px}
+.clockrow{display:flex; align-items:center; gap:14px; margin-bottom:6px}
+.clock{font-size:34px; font-weight:750; font-variant-numeric:tabular-nums; line-height:1.1}
+.clock small{display:block; font-size:12px; font-weight:600; color:var(--muted)}
+button{font:inherit; font-weight:600; padding:7px 12px; border-radius:8px; cursor:pointer; border:1px solid var(--border); background:var(--surface-2); color:var(--ink)}
+button.primary{background:var(--series); border-color:var(--series); color:#fff}
+input[type=range]{width:100%; accent-color:var(--series); margin:4px 0 0}
+.slider{margin:8px 0 2px}
+.slider label{display:flex; justify-content:space-between; gap:10px; align-items:baseline}
+.slider .val{font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap}
+.slider .desc{color:var(--muted); font-size:12px; margin-top:1px}
+.dirgrid{display:flex; flex-direction:column; gap:10px}
+.dseg{border:1px solid var(--border); border-radius:10px; padding:9px 12px; border-left:4px solid var(--axisline)}
+.dseg .name{font-weight:650; font-size:13px; margin-bottom:4px}
+.drow{display:flex; align-items:center; gap:8px; margin:2px 0}
+.dlab{flex:0 0 96px; font-size:11px; color:var(--muted); text-align:right}
+.dtrack{flex:1; background:var(--surface-2); border-radius:4px; height:13px; position:relative; overflow:hidden}
+.dbar{height:100%; border-radius:0 4px 4px 0}
+.dval{flex:0 0 108px; font-size:11px; font-variant-numeric:tabular-nums; font-weight:650}
+.fnote{font-size:11px; color:var(--muted); margin-top:8px}
+footer.site{max-width:1400px; margin:0 auto; padding:0 22px 34px; color:var(--muted); font-size:12px}
+/* animert flytretning på kartet */
+.flowline{stroke-dasharray:1 12; animation:flowdash 1s linear infinite}
+@keyframes flowdash{to{stroke-dashoffset:-13}}
+@media (prefers-reduced-motion: reduce){.flowline{animation:none}}
+</style>
+</head>
+<body>
+<header class="site">
+  <h1>Trafikkflyt time for time <span class="badge">Uoffisiell borgersimulering</span></h1>
+  <p class="sub">Samme modell som <a id="backlink" href="index.html">belastningskalkulatoren</a>, men her ser du trafikken
+  <em>i hver retning</em>, time for time gjennom et hverdagsdøgn med E134 Vassum–Måna stengt.
+  De hvite prikkene på kartet beveger seg i den retningen flest kjører akkurat nå. Dra i klokka eller trykk «Spill av døgnet».</p>
+</header>
+<div class="layout">
+  <div class="mapwrap"><div id="map" role="img" aria-label="Kart med trafikkflyt per time"></div></div>
+  <div class="panel">
+    <section class="card">
+      <div class="clockrow">
+        <div class="clock"><span id="clocktime">07–08</span><small id="clocklabel">Morgenrush</small></div>
+        <button class="primary" id="playbtn" type="button">▶ Spill av døgnet</button>
+      </div>
+      <input type="range" id="hour" min="0" max="23" step="1" value="7" aria-label="Time på døgnet">
+      <div class="fnote">Retningsfordelingen følger et typisk pendlerdøgn: mot E6/Oslo om morgenen, hjem mot Drøbak om ettermiddagen.</div>
+    </section>
+    <section class="card">
+      <h2>Trafikk per retning denne timen <span class="hint">– kjøretøy/time mot praktisk kapasitet</span></h2>
+      <div class="dirgrid" id="dirgrid"></div>
+      <div class="fnote">Søylene viser kjøretøy per time i hver retning, målt mot praktisk kapasitet per retning (full søyle = kapasiteten er brukt opp – køen vokser). Grunntrafikk + omkjøringstrafikk, samme forutsetninger som i kalkulatoren.</div>
+    </section>
+    <section class="card">
+      <h2>Forutsetninger <span class="hint">– deles med kalkulatoren via lenken</span></h2>
+      <div id="sliders"></div>
+      <div class="fnote">Full parametersetting, metode og kilder finner du i <a href="index.html" id="backlink2">hovedkalkulatoren</a>. Lenker mellom sidene tar med seg innstillingene dine.</div>
+    </section>
+  </div>
+</div>
+<footer class="site">Uoffisielt innbyggerverktøy for Drøbak/Frogn. Forenklet modell – ikke en offisiell trafikkanalyse.</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+"use strict";
+const ROADS = {
+  rv152_east: {
+    name: "Rv. 152 Korsegården (E6) – Ottarsrud – Dyrløkke",
+    short: "Rv. 152 fra Ås",
+    base: 7500, cap: 850, lenKm: 6.9, speed: 70,
+    coords: [[59.6627,10.74598],[59.66254,10.7443],[59.66156,10.74139],[59.66083,10.73626],[59.65963,10.73215],[59.65944,10.72669],[59.65826,10.72047],[59.65843,10.71199],[59.6565,10.70354],[59.65642,10.69317],[59.65801,10.68847],[59.65747,10.68546],[59.6578,10.68347],[59.66005,10.67962],[59.65999,10.67585],[59.66046,10.67332],[59.66039,10.66856],[59.66073,10.66682],[59.66448,10.66066],[59.66755,10.65952],[59.66967,10.66002],[59.67309,10.65749],[59.67365,10.6565],[59.6738,10.65592],[59.67412,10.65495]]
+  },
+  rv152_north: {
+    name: "Rv. 152 Dyrløkke – Heer – Måna",
+    short: "Rv. 152 Dyrløkke–Måna",
+    base: 10000, cap: 750, lenKm: 3.4, speed: 60,
+    coords: [[59.67412,10.65495],[59.6753,10.65771],[59.67853,10.66324],[59.68032,10.66514],[59.68225,10.66627],[59.68515,10.66887],[59.68616,10.66786],[59.68661,10.66429],[59.68772,10.66207],[59.68935,10.66011],[59.6908,10.65908],[59.6924,10.65883],[59.6944,10.66019],[59.69476,10.65997]]
+  },
+  osloveien_north: {
+    name: "Osloveien Måna – Vinterbro/E6",
+    short: "Osloveien (mot E6 nord)",
+    base: 3500, cap: 750, lenKm: 5.6, speed: 70,
+    coords: [[59.68515,10.66887],[59.68591,10.67032],[59.68637,10.67217],[59.68745,10.67882],[59.68844,10.68719],[59.68883,10.68951],[59.69011,10.69448],[59.6916,10.69847],[59.69212,10.70067],[59.69217,10.70158],[59.69198,10.70278],[59.68598,10.7054],[59.68404,10.7115],[59.68548,10.7279],[59.68834,10.73243],[59.6894,10.73608]]
+  },
+  holtbrat: {
+    name: "Holtbråtveien (Måna – mot Nesodden)",
+    short: "Holtbråtveien",
+    base: 2500, cap: 600, lenKm: 3.3, speed: 60,
+    coords: [[59.69476,10.65997],[59.69566,10.65761],[59.69622,10.65693],[59.69696,10.65693],[59.69771,10.65752],[59.69906,10.65975],[59.70303,10.66387],[59.70372,10.66414],[59.70575,10.66389],[59.70723,10.66508],[59.70946,10.6658],[59.71282,10.66476],[59.71358,10.6641],[59.71462,10.66212],[59.71539,10.66245],[59.71608,10.66232],[59.71668,10.6629],[59.71726,10.66243]]
+  },
+  fv156: {
+    name: "Nesoddveien/fv. 156 Nessetveien (mot E6 Vinterbro)",
+    short: "Fv. 156/Nesoddveien",
+    base: 3000, cap: 700, lenKm: 10.1, speed: 70,
+    coords: [[59.71726,10.66243],[59.71803,10.66176],[59.71946,10.66328],[59.71984,10.66654],[59.72107,10.66998],[59.72158,10.67426],[59.72432,10.67901],[59.72674,10.68525],[59.72359,10.68994],[59.72428,10.69485],[59.72342,10.69746],[59.72067,10.70001],[59.72061,10.70065],[59.72117,10.70113],[59.72118,10.70226],[59.72008,10.70361],[59.72016,10.70545],[59.71881,10.70668],[59.71683,10.70571],[59.71561,10.70656],[59.7145,10.70623],[59.71408,10.70748],[59.71634,10.71132],[59.71642,10.71565],[59.71788,10.71869],[59.71918,10.71997],[59.71929,10.72227],[59.72029,10.7251],[59.71968,10.72907],[59.7215,10.72865],[59.72449,10.72934],[59.72613,10.73174],[59.72941,10.73386],[59.73529,10.74635],[59.73623,10.75014],[59.73698,10.76059],[59.73876,10.77168]]
+  },
+  osloveien_drobak: {
+    name: "Osloveien Drøbak sentrum – Dyrløkke",
+    short: "Osloveien fra Drøbak",
+    base: 8000, cap: 750, lenKm: 2.7, speed: 50,
+    localOnly: true,
+    coords: [[59.66276,10.63035],[59.66247,10.63087],[59.66251,10.63168],[59.66282,10.63266],[59.66316,10.63358],[59.66355,10.63424],[59.66367,10.63541],[59.66436,10.63603],[59.66499,10.63534],[59.66556,10.63554],[59.66645,10.63635],[59.667,10.63757],[59.66721,10.63975],[59.66708,10.6407],[59.66668,10.64216],[59.66665,10.64376],[59.66704,10.64505],[59.66767,10.64616],[59.67188,10.65038],[59.67266,10.65147],[59.67286,10.65185],[59.67317,10.65253],[59.67344,10.65317],[59.67377,10.65392],[59.67412,10.65495]]
+  },
+  smieveien: {
+    name: "Snarveien Smieveien – Heer – Heerveien (Dyrløkke–Bakker)",
+    short: "Smieveien over Heer",
+    kind: "boliggate",
+    base: 400, cap: 300, lenKm: 2.0, speed: 40,
+    coords: [[59.67412,10.65495],[59.67419,10.65463],[59.67426,10.65451],[59.67429,10.65435],[59.67429,10.6542],[59.67424,10.65392],[59.67423,10.6537],[59.67425,10.65343],[59.67429,10.65321],[59.67444,10.65233],[59.67466,10.65116],[59.67475,10.65061],[59.67481,10.65026],[59.67483,10.65016],[59.67487,10.64999],[59.67503,10.64958],[59.67521,10.6491],[59.67534,10.64923],[59.67565,10.64948],[59.67606,10.64983],[59.67651,10.65018],[59.67671,10.65036],[59.67687,10.65057],[59.67707,10.65089],[59.67736,10.65132],[59.67762,10.65163],[59.67788,10.65191],[59.67803,10.65213],[59.67817,10.6524],[59.67837,10.65289],[59.67872,10.65367],[59.67887,10.65401],[59.67904,10.6545],[59.67919,10.65499],[59.67943,10.65576],[59.67957,10.6561],[59.67973,10.65642],[59.67988,10.65675],[59.68005,10.6572],[59.68014,10.65715],[59.68025,10.65713],[59.68049,10.65714],[59.68078,10.65716],[59.68104,10.65717],[59.68126,10.65725],[59.68157,10.6574],[59.68172,10.65749],[59.68187,10.65759],[59.682,10.65768],[59.6823,10.65782],[59.68249,10.65814],[59.68271,10.65839],[59.68284,10.65855],[59.68339,10.65918],[59.68376,10.65962],[59.68404,10.65996],[59.68466,10.66069],[59.68485,10.66091],[59.68513,10.66124],[59.6855,10.66168],[59.68574,10.66198],[59.68626,10.66266],[59.68648,10.66294],[59.68656,10.66305],[59.68669,10.66324],[59.68676,10.66352],[59.68683,10.6637],[59.68672,10.66394],[59.68666,10.66413],[59.68661,10.66429]]
+  }
+};
+const CLOSED = [[59.70191,10.73843],[59.70247,10.73798],[59.70382,10.73815],[59.70538,10.73994],[59.70673,10.73982],[59.70699,10.73953],[59.70842,10.73234],[59.71031,10.71936],[59.71166,10.71468],[59.71207,10.71254],[59.71237,10.70749],[59.71214,10.70186],[59.71149,10.69702],[59.71044,10.69253],[59.70309,10.67143],[59.7008,10.66732],[59.69785,10.66374],[59.69575,10.66206],[59.69476,10.65997]];
+const TUNNEL = [[59.69476,10.65997],[59.6935,10.6535],[59.691,10.645],[59.687,10.625],[59.681,10.585],[59.678,10.555]];
+
+/* Hvilken ende av koordinatlisten peker mot E6? */
+const E6_AT_END = {rv152_east:false, rv152_north:false, osloveien_north:true,
+                   holtbrat:true, fv156:true, osloveien_drobak:true, smieveien:true};
+
+const PARAMS = {
+  adt:      {label:"Trafikk på E134 Vassum–Måna i dag", unit:" kjt/døgn", min:8000, max:22000, step:500, def:16000},
+  avvisning:{label:"Andel som forsvinner helt", unit:" %", min:0, max:60, step:5, def:25},
+  sorandel: {label:"Andel som skal til/fra E6 sør (Ås, Vestby, Moss)", unit:" %", min:0, max:100, step:5, def:45},
+  sor152:   {label:"Sør-trafikk som velger rv. 152 om Korsegården", unit:" %", min:0, max:100, step:5, def:75},
+  nordoslo: {label:"Nord-trafikk som velger Osloveien", unit:" %", min:0, max:100, step:5, def:85}
+};
+const state = {t: 7};
+for (const k in PARAMS) state[k] = PARAMS[k].def;
+
+const HOURPROFILE_RAW = [0.9,0.5,0.4,0.4,0.9,2.6,5.8,8.6,7.4,4.9,4.2,4.3,4.6,5.0,6.1,7.9,8.8,7.9,5.6,4.2,3.2,2.4,1.6,1.1];
+const HP_SUM = HOURPROFILE_RAW.reduce((a,b)=>a+b,0);
+const HOURPROFILE = HOURPROFILE_RAW.map(v=>v/HP_SUM);
+/* Andel av timens trafikk som kjører MOT E6 (resten kjører mot Drøbak/Måna) */
+const TOE6 = [.5,.5,.5,.5,.55,.62,.67,.68,.64,.58,.52,.5,.48,.45,.42,.36,.33,.35,.42,.46,.5,.5,.5,.5];
+const HOURLABEL = h => h<5?"Natt":h<6?"Tidlig morgen":h<9?"Morgenrush":h<11?"Formiddag":h<14?"Midt på dagen":h<15?"Tidlig ettermiddag":h<18?"Ettermiddagsrush":h<21?"Kveld":"Sen kveld";
+
+function totals(){
+  const s = state;
+  const remaining = s.adt * (1 - s.avvisning/100);
+  const south = remaining * (s.sorandel/100), north = remaining - south;
+  const via152 = south * (s.sor152/100), viaFv = north * (1 - s.nordoslo/100);
+  const extra = {
+    rv152_east: via152, rv152_north: via152,
+    osloveien_north: south - via152 + north * (s.nordoslo/100),
+    holtbrat: viaFv, fv156: viaFv, osloveien_drobak: 0
+  };
+  extra.smieveien = 0.03 * (ROADS.rv152_north.base + extra.rv152_north);
+  const t = {};
+  for (const id in ROADS) t[id] = ROADS[id].base + (extra[id] || 0);
+  return t;
+}
+function hourFlow(id, tot, h){
+  const flow = tot * HOURPROFILE[h];
+  const toE6 = flow * TOE6[h], fromE6 = flow - toE6;
+  const cap = ROADS[id].cap;
+  return {toE6, fromE6, vcTo: toE6/cap, vcFrom: fromE6/cap, flow};
+}
+function lvl(vc){
+  if (vc < 0.7)  return {hex:"#0ca30c", t:"god flyt"};
+  if (vc < 0.9)  return {hex:"#fab219", t:"tett"};
+  if (vc < 1.1)  return {hex:"#ec835a", t:"kø"};
+  return           {hex:"#d03b3b", t:"overbelastet"};
+}
+const fmt = n => Math.round(n).toLocaleString("no-NO");
+
+/* ---------- Kart ---------- */
+const baseLines = {}, flowLines = {};
+let map = null;
+(function initMap(){
+  if (typeof L === "undefined"){
+    document.getElementById("map").innerHTML =
+      '<div style="display:flex;height:100%;align-items:center;justify-content:center;padding:24px;text-align:center;color:var(--ink-2)">Kartet kunne ikke lastes. Panelet til høyre fungerer likevel.</div>';
+    return;
+  }
+  map = L.map("map", {scrollWheelZoom:true}).setView([59.688, 10.685], 12);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:18,
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-bidragsytere'}).addTo(map);
+  L.polyline(CLOSED, {color:"#d03b3b", weight:5, dashArray:"8 8", opacity:.9}).addTo(map)
+    .bindPopup("<b>E134 Vassum–Måna</b><br>Stengt i anleggsperioden.");
+  L.polyline(TUNNEL, {color:"#898781", weight:4, dashArray:"4 8", opacity:.8}).addTo(map)
+    .bindPopup("<b>Oslofjordtunnelen</b><br>Åpen (korte stengninger ved sprengning).");
+  for (const id in ROADS){
+    baseLines[id] = L.polyline(ROADS[id].coords, {color:"#0ca30c", weight:6, opacity:.9}).addTo(map);
+    flowLines[id] = L.polyline(ROADS[id].coords, {color:"#ffffff", weight:2.5, opacity:.95, className:"flowline", interactive:false}).addTo(map);
+  }
+  const legend = L.control({position:"bottomleft"});
+  legend.onAdd = function(){
+    const div = L.DomUtil.create("div","maplegend");
+    div.innerHTML = `
+      <div class="row"><span class="sw" style="background:#0ca30c"></span> God flyt (verste retning &lt; 70 %)</div>
+      <div class="row"><span class="sw" style="background:#fab219"></span> Tett (70–90 %)</div>
+      <div class="row"><span class="sw" style="background:#ec835a"></span> Kø (90–110 %)</div>
+      <div class="row"><span class="sw" style="background:#d03b3b"></span> Overbelastet (&gt; 110 %)</div>
+      <div class="row" style="color:var(--muted)">Prikkene beveger seg dit flest kjører.<br>Tykkelse = trafikk denne timen.</div>`;
+    return div;
+  };
+  legend.addTo(map);
+})();
+
+/* ---------- Kontroller ---------- */
+const slidersEl = document.getElementById("sliders");
+for (const k in PARAMS){
+  const p = PARAMS[k];
+  slidersEl.insertAdjacentHTML("beforeend", `<div class="slider">
+    <label for="sl_${k}">${p.label} <span class="val" id="val_${k}"></span></label>
+    <input type="range" id="sl_${k}" min="${p.min}" max="${p.max}" step="${p.step}" value="${state[k]}"></div>`);
+}
+for (const k in PARAMS){
+  document.getElementById("sl_"+k).addEventListener("input", e=>{ state[k] = +e.target.value; update(); });
+}
+document.getElementById("hour").addEventListener("input", e=>{ state.t = +e.target.value; update(); });
+
+let timer = null;
+const playbtn = document.getElementById("playbtn");
+playbtn.addEventListener("click", ()=>{
+  if (timer){ clearInterval(timer); timer = null; playbtn.textContent = "▶ Spill av døgnet"; return; }
+  playbtn.textContent = "⏸ Pause";
+  timer = setInterval(()=>{
+    state.t = (state.t + 1) % 24;
+    document.getElementById("hour").value = state.t;
+    update();
+  }, 900);
+});
+
+/* ---------- Deling via URL ---------- */
+function currentHash(){
+  const parts = Object.keys(PARAMS).map(k=>k+"="+state[k]);
+  parts.push("t="+state.t);
+  return "#" + parts.join("&");
+}
+function readHash(){
+  if (!location.hash) return;
+  location.hash.slice(1).split("&").forEach(kv=>{
+    const [k,v] = kv.split("=");
+    if (k === "t" && !isNaN(+v)){ state.t = Math.min(23, Math.max(0, +v)); document.getElementById("hour").value = state.t; }
+    else if (PARAMS[k] && v!==undefined && !isNaN(+v)){
+      state[k] = Math.min(PARAMS[k].max, Math.max(PARAMS[k].min, +v));
+      document.getElementById("sl_"+k).value = state[k];
+    }
+  });
+}
+
+/* ---------- Oppdatering ---------- */
+function update(){
+  for (const k in PARAMS) document.getElementById("val_"+k).textContent = state[k].toLocaleString("no-NO") + PARAMS[k].unit;
+  const h = state.t;
+  document.getElementById("clocktime").textContent = String(h).padStart(2,"0") + "–" + String((h+1)%24).padStart(2,"0");
+  document.getElementById("clocklabel").textContent = HOURLABEL(h);
+  const tot = totals();
+
+  let cards = "";
+  for (const id in ROADS){
+    const f = hourFlow(id, tot[id], h);
+    const worst = Math.max(f.vcTo, f.vcFrom);
+    const c = lvl(worst);
+    if (baseLines[id]){
+      baseLines[id].setStyle({color: c.hex, weight: 4 + Math.min(8, f.flow/180)});
+      baseLines[id].bindPopup(`<b>${ROADS[id].name}</b><br>
+        kl. ${String(h).padStart(2,"0")}–${String((h+1)%24).padStart(2,"0")}:<br>
+        → mot E6: <b>${fmt(f.toE6)}</b> kjt/t (${Math.round(f.vcTo*100)} % av kapasitet)<br>
+        ← mot Drøbak/Måna: <b>${fmt(f.fromE6)}</b> kjt/t (${Math.round(f.vcFrom*100)} % av kapasitet)`);
+      const domToE6 = f.vcTo >= f.vcFrom;
+      const forward = (domToE6 && E6_AT_END[id]) || (!domToE6 && !E6_AT_END[id]);
+      flowLines[id].setLatLngs(forward ? ROADS[id].coords : [...ROADS[id].coords].reverse());
+    }
+    const bar = (v, cap, label, arrow) => {
+      const vc = v/cap, cc = lvl(vc);
+      return `<div class="drow"><div class="dlab">${arrow} ${label}</div>
+        <div class="dtrack"><div class="dbar" style="width:${Math.min(100, vc*100)}%;background:${cc.hex}"></div></div>
+        <div class="dval">${fmt(v)} kjt/t · ${Math.round(vc*100)} %</div></div>`;
+    };
+    cards += `<div class="dseg" style="border-left-color:${c.hex}"><div class="name">${ROADS[id].short}</div>
+      ${bar(f.toE6, ROADS[id].cap, "mot E6", "→")}
+      ${bar(f.fromE6, ROADS[id].cap, "mot Drøbak", "←")}</div>`;
+  }
+  document.getElementById("dirgrid").innerHTML = cards;
+
+  try { history.replaceState(null,"",currentHash()); } catch(e){}
+  const back = "index.html" + currentHash();
+  document.getElementById("backlink").href = back;
+  document.getElementById("backlink2").href = back;
+}
+readHash();
+update();
+
+</script>
+</body>
+</html>
